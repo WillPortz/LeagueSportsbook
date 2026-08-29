@@ -205,13 +205,13 @@ html, body, #root { margin: 0; min-height: 100%; }
 .dk-sport-chip.active { background: var(--gold); color: #241d05; border-color: var(--gold); }
 .sb-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.75rem; }
 .sb-matchup-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
-.sb-matchup-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.75rem; align-items: stretch; margin-bottom: 1.25rem; }
-.sb-matchup-team { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; }
+.sb-matchup-scoreboard { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 0.75rem; align-items: stretch; margin-bottom: 1.25rem; }
+.sb-matchup-team { min-width: 0; background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; }
 .sb-matchup-team.you { border-color: var(--gold); }
 .sb-matchup-team h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.03em; }
 .sb-matchup-total { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; margin-bottom: 0.65rem; }
 .sb-matchup-vs { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; color: #7ea08f; display: flex; align-items: center; justify-content: center; }
-.sb-matchup-player { display: grid; grid-template-columns: 2.2rem 1fr auto auto; gap: 0.35rem 0.5rem; align-items: center; padding: 0.35rem 0.4rem; border-top: 1px solid rgba(63,102,87,0.45); font-size: 0.78rem; width: 100%; border-left: none; border-right: none; border-bottom: none; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; border-radius: 4px; transition: background 0.12s, outline 0.12s; }
+.sb-matchup-player { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr) auto auto; gap: 0.35rem 0.5rem; align-items: center; padding: 0.35rem 0.4rem; border-top: 1px solid rgba(63,102,87,0.45); font-size: 0.78rem; width: 100%; border-left: none; border-right: none; border-bottom: none; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; border-radius: 4px; transition: background 0.12s, outline 0.12s; }
 .sb-matchup-player:first-of-type { border-top: none; }
 .sb-matchup-player:hover { background: rgba(255,255,255,0.04); }
 .sb-matchup-player.selected { background: rgba(201, 162, 39, 0.12); outline: 1px solid var(--gold); }
@@ -219,8 +219,15 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-matchup-player.bench.selected { opacity: 1; }
 .sb-matchup-bench-tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.58rem; letter-spacing: 0.04em; color: #7ea08f; border: 1px solid var(--line); border-radius: 3px; padding: 0 0.3rem; margin-left: 0.4rem; vertical-align: 1px; }
 .sb-matchup-pos { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
-.sb-matchup-name { font-weight: 500; }
+.sb-matchup-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sb-matchup-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
 .sb-matchup-proj { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #c9e8d4; min-width: 2.8rem; text-align: right; }
 .sb-matchup-actual { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--gold-bright); min-width: 2.8rem; text-align: right; }
 .sb-matchup-bets h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }
+
+@media (max-width: 640px) {
+  .sb-matchup-scoreboard { grid-template-columns: 1fr; }
+  .sb-matchup-vs { padding: 0.1rem 0; }
+  .sb-matchup-player { grid-template-columns: 1.8rem minmax(0, 1fr) auto auto; gap: 0.25rem 0.4rem; font-size: 0.74rem; }
+  .sb-matchup-proj, .sb-matchup-actual { min-width: 2.3rem; font-size: 0.68rem; }
+}
