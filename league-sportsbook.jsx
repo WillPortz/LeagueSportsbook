@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, ScrollText,
   Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords,
@@ -690,13 +690,11 @@ export default function LeagueSportsbook() {
   const [selectedWeek, setSelectedWeek] = useState(
     stored?.selectedWeek || stored?.week || 1,
   );
-  const [scoreLoadWeek, setScoreLoadWeek] = useState(stored?.week || 1);
 
-  const [weekData, setWeekData] = useState({});
-  const [weekLoaded, setWeekLoaded] = useState(false);
-  const [weekLoadedFor, setWeekLoadedFor] = useState(null);
+  const [weekCache, setWeekCache] = useState({});
+  const weekCacheRef = useRef({});
+  const loadingWeeksRef = useRef(new Set());
   const [players, setPlayers] = useState({});
-  const [playerProjections, setPlayerProjections] = useState({});
   const [boardCategory, setBoardCategory] = useState("all");
   const [boardFantasyTeam, setBoardFantasyTeam] = useState("all");
   const [boardPosition, setBoardPosition] = useState("all");
@@ -786,7 +784,6 @@ export default function LeagueSportsbook() {
         inputId: leagueId.trim(),
       }));
       setSelectedWeek(data.week);
-      setScoreLoadWeek(data.week);
       setForm((f) => ({ ...f, week: data.week }));
       setSetupViewer((prev) => prev || data.members[0]?.id || "");
     } catch {
@@ -821,7 +818,6 @@ export default function LeagueSportsbook() {
         error: null,
       }));
       setSelectedWeek((w) => clampWeekToSeason(w, data.week));
-      setScoreLoadWeek(data.week);
     } catch {
       setLeague((s) => ({
         ...s,
@@ -850,11 +846,10 @@ export default function LeagueSportsbook() {
     setViewer("");
     setSetupViewer("");
     setTicketSeq(TICKET_SEQ);
-    setWeekData({});
-    setWeekLoaded(false);
-    setWeekLoadedFor(null);
+    setWeekCache({});
+    weekCacheRef.current = {};
+    loadingWeeksRef.current.clear();
     setPlayers({});
-    setPlayerProjections({});
     setBoardCategory("all");
     setBoardFantasyTeam("all");
     setBoardPosition("all");
@@ -871,10 +866,32 @@ export default function LeagueSportsbook() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadBoardData(weekNum = league.week) {
-    if (!league.leagueId) return;
+  const loadWeekData = useCallback(async (weekNum, { force = false, showSpinner = false } = {}) => {
+    if (!league.leagueId) return false;
     const wk = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(weekNum) || 1));
-    setLeague((s) => ({ ...s, loading: true, error: null }));
+
+    if (!force && weekCacheRef.current[wk]) return true;
+    if (loadingWeeksRef.current.has(wk)) {
+      return new Promise((resolve) => {
+        const started = Date.now();
+        const wait = () => {
+          if (weekCacheRef.current[wk]) {
+            resolve(true);
+            return;
+          }
+          if (!loadingWeeksRef.current.has(wk) || Date.now() - started > 30000) {
+            resolve(false);
+            return;
+          }
+          setTimeout(wait, 100);
+        };
+        wait();
+      });
+    }
+
+    loadingWeeksRef.current.add(wk);
+    if (showSpinner) setLeague((s) => ({ ...s, loading: true, error: null }));
+
     try {
       const [currentRes, stateRes, leagueRes] = await Promise.all([
         fetch(`https://api.sleeper.app/v1/league/${league.leagueId}/matchups/${wk}`),
@@ -894,32 +911,43 @@ export default function LeagueSportsbook() {
       const playerInfo = await fetchPlayerInfo(starterIds);
       const projections = await fetchSleeperProjections(wk, season, starterIds, "regular");
 
-      setWeekData(map);
-      setPlayerProjections(projections);
+      const entry = { matchups: map, projections };
+      weekCacheRef.current = { ...weekCacheRef.current, [wk]: entry };
+      setWeekCache((prev) => ({ ...prev, [wk]: entry }));
       setPlayers(playerInfo);
-      setWeekLoaded(true);
-      setWeekLoadedFor(wk);
       setLeague((s) => ({
         ...s,
-        loading: false,
+        loading: showSpinner ? false : s.loading,
         season,
         week: schedule.currentWeek,
         nflSeasonType: schedule.nflSeasonType,
+        error: null,
       }));
-      setSelectedWeek((sel) => clampWeekToSeason(sel, schedule.currentWeek));
-      setScoreLoadWeek(schedule.currentWeek);
+      if (showSpinner) {
+        setSelectedWeek((sel) => clampWeekToSeason(sel, schedule.currentWeek));
+      }
+      return true;
     } catch {
-      setLeague((s) => ({
-        ...s,
-        loading: false,
-        error: "Couldn't load Sleeper projections for that week. Try again in a moment.",
-      }));
+      if (showSpinner) {
+        setLeague((s) => ({
+          ...s,
+          loading: false,
+          error: "Couldn't load Sleeper data for that week. Try again in a moment.",
+        }));
+      }
+      return false;
+    } finally {
+      loadingWeeksRef.current.delete(wk);
     }
-  }
+  }, [league.leagueId, members]);
 
-  async function loadWeek(weekNum = scoreLoadWeek) {
-    await loadBoardData(weekNum);
-  }
+  const prefetchSeasonWeeks = useCallback(async (throughWeek, { force = false } = {}) => {
+    const end = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(throughWeek) || 1));
+    for (let w = 1; w <= end; w++) {
+      if (!force && weekCacheRef.current[w]) continue;
+      await loadWeekData(w, { force });
+    }
+  }, [loadWeekData]);
 
   // ---------- ledger ----------
   const ledger = useMemo(() => computeLedger(bets, members), [bets, members]);
@@ -969,13 +997,26 @@ export default function LeagueSportsbook() {
 
   const matchupWeek = currentWeek;
 
+  const activeWeekData = weekCache[activeWeek]?.matchups ?? {};
+  const activeProjections = weekCache[activeWeek]?.projections ?? {};
+  const matchupWeekData = weekCache[matchupWeek]?.matchups ?? {};
+  const matchupProjections = weekCache[matchupWeek]?.projections ?? {};
+
+  const loadedWeekCount = useMemo(
+    () => Object.keys(weekCache).filter((w) => Number(w) <= currentWeek).length,
+    [weekCache, currentWeek],
+  );
+
   useEffect(() => {
     if (!leagueReady || !league.leagueId) return;
-    if (tab !== "board" && tab !== "matchup") return;
-    const weekToLoad = tab === "matchup" ? matchupWeek : activeWeek;
-    if (weekLoadedFor !== weekToLoad) loadBoardData(weekToLoad);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, activeWeek, matchupWeek, leagueReady, league.leagueId]);
+    prefetchSeasonWeeks(currentWeek);
+  }, [leagueReady, league.leagueId, currentWeek, prefetchSeasonWeeks]);
+
+  useEffect(() => {
+    if (!leagueReady || !league.leagueId) return;
+    const viewWeek = tab === "matchup" ? matchupWeek : activeWeek;
+    loadWeekData(viewWeek, { showSpinner: true });
+  }, [leagueReady, league.leagueId, activeWeek, matchupWeek, tab, loadWeekData]);
 
   const weekBets = useMemo(
     () => bets.filter((b) => Number(b.week) === activeWeek),
@@ -992,11 +1033,11 @@ export default function LeagueSportsbook() {
     () => generateBoardOfferings(
       members,
       activeWeek,
-      weekLoadedFor === activeWeek ? weekData : {},
+      activeWeekData,
       players,
-      playerProjections,
+      activeProjections,
     ),
-    [members, activeWeek, weekData, weekLoadedFor, players, playerProjections],
+    [members, activeWeek, activeWeekData, players, activeProjections],
   );
 
   const boardNflTeams = useMemo(() => {
@@ -1025,12 +1066,12 @@ export default function LeagueSportsbook() {
     [members, viewer],
   );
 
-  const matchupDataReady = weekLoadedFor === matchupWeek;
+  const matchupDataReady = !!weekCache[matchupWeek];
 
   const matchupOpponent = useMemo(() => {
     if (!matchupDataReady || !viewer) return null;
-    return getMatchupOpponent(viewer, members, weekData);
-  }, [matchupDataReady, viewer, members, weekData]);
+    return getMatchupOpponent(viewer, members, matchupWeekData);
+  }, [matchupDataReady, viewer, members, matchupWeekData]);
 
   const matchupOfferings = useMemo(() => {
     if (!viewerMember || !matchupOpponent || !matchupDataReady) return [];
@@ -1039,30 +1080,30 @@ export default function LeagueSportsbook() {
       matchupOpponent,
       matchupWeek,
       players,
-      playerProjections,
+      matchupProjections,
     );
-  }, [viewerMember, matchupOpponent, matchupWeek, players, playerProjections, matchupDataReady]);
+  }, [viewerMember, matchupOpponent, matchupWeek, players, matchupProjections, matchupDataReady]);
 
   const myStarterRows = useMemo(
     () => (viewerMember && matchupDataReady
-      ? starterRows(viewerMember, players, playerProjections, weekData)
+      ? starterRows(viewerMember, players, matchupProjections, matchupWeekData)
       : []),
-    [viewerMember, players, playerProjections, weekData, matchupDataReady],
+    [viewerMember, players, matchupProjections, matchupWeekData, matchupDataReady],
   );
 
   const oppStarterRows = useMemo(
     () => (matchupOpponent && matchupDataReady
-      ? starterRows(matchupOpponent, players, playerProjections, weekData)
+      ? starterRows(matchupOpponent, players, matchupProjections, matchupWeekData)
       : []),
-    [matchupOpponent, players, playerProjections, weekData, matchupDataReady],
+    [matchupOpponent, players, matchupProjections, matchupWeekData, matchupDataReady],
   );
 
-  const myLineupProj = viewerMember ? sumLineupLine(viewerMember, players, playerProjections) : 0;
-  const oppLineupProj = matchupOpponent ? sumLineupLine(matchupOpponent, players, playerProjections) : 0;
+  const myLineupProj = viewerMember ? sumLineupLine(viewerMember, players, matchupProjections) : 0;
+  const oppLineupProj = matchupOpponent ? sumLineupLine(matchupOpponent, players, matchupProjections) : 0;
 
   const myStarterPicks = useMemo(
-    () => starterPickOptions(viewerMember, players, playerProjections),
-    [viewerMember, players, playerProjections],
+    () => starterPickOptions(viewerMember, players, activeProjections),
+    [viewerMember, players, activeProjections],
   );
 
   const customOppMember = useMemo(
@@ -1074,8 +1115,8 @@ export default function LeagueSportsbook() {
   const oppPosFilter = customMatchPos && myPlayerMeta?.position ? myPlayerMeta.position : "all";
 
   const oppStarterPicks = useMemo(
-    () => starterPickOptions(customOppMember, players, playerProjections, oppPosFilter),
-    [customOppMember, players, playerProjections, oppPosFilter],
+    () => starterPickOptions(customOppMember, players, activeProjections, oppPosFilter),
+    [customOppMember, players, activeProjections, oppPosFilter],
   );
 
   const customH2hOffering = useMemo(
@@ -1086,10 +1127,10 @@ export default function LeagueSportsbook() {
       customH2H.oppPlayerId,
       activeWeek,
       players,
-      playerProjections,
+      activeProjections,
       members,
     ),
-    [viewer, customH2H, activeWeek, players, playerProjections, members],
+    [viewer, customH2H, activeWeek, players, activeProjections, members],
   );
 
   const matchupBetOffering = useMemo(() => {
@@ -1102,7 +1143,7 @@ export default function LeagueSportsbook() {
         opp,
         matchupWeek,
         players,
-        playerProjections,
+        matchupProjections,
         members,
       );
     }
@@ -1115,7 +1156,7 @@ export default function LeagueSportsbook() {
     viewer,
     matchupWeek,
     players,
-    playerProjections,
+    matchupProjections,
     members,
     matchupOfferings,
   ]);
@@ -1233,8 +1274,8 @@ export default function LeagueSportsbook() {
         <h4>{member.name}{isYou ? " (You)" : ""}</h4>
         <div className="sb-matchup-total">
           Upcoming Sleeper PPR proj: <strong>{totalProj}</strong>
-          {weekData[member.rosterId]?.points != null && (
-            <> · Actual: <strong>{weekData[member.rosterId].points}</strong></>
+          {matchupWeekData[member.rosterId]?.points != null && (
+            <> · Actual: <strong>{matchupWeekData[member.rosterId].points}</strong></>
           )}
         </div>
         {rows.map((row) => (
@@ -1356,8 +1397,18 @@ export default function LeagueSportsbook() {
     }));
   }
 
-  function autoGrade(bet) {
+  async function autoGrade(bet) {
     setBetErrors((e) => ({ ...e, [bet.id]: null }));
+    const wk = Number(bet.week) || currentWeek;
+    const loaded = await loadWeekData(wk);
+    const weekData = weekCacheRef.current[wk]?.matchups ?? {};
+    if (!loaded || !Object.keys(weekData).length) {
+      setBetErrors((e) => ({
+        ...e,
+        [bet.id]: `Couldn't load week ${wk} scores from Sleeper — try again in a moment.`,
+      }));
+      return;
+    }
 
     if (bet.type === "matchup") {
       const rA = rosterIdFor(bet.creator);
@@ -1377,7 +1428,7 @@ export default function LeagueSportsbook() {
         const ptsPick = lineupFantasyPts(weekData, mPick.rosterId, mPick.starters);
         const ptsPeer = lineupFantasyPts(weekData, mPeer.rosterId, mPeer.starters);
         if (ptsPick == null || ptsPeer == null) {
-          setBetErrors((e) => ({ ...e, [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.` }));
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
           return;
         }
         if (ptsPick === ptsPeer) {
@@ -1394,7 +1445,7 @@ export default function LeagueSportsbook() {
       const dataA = weekData[rA];
       const dataB = weekData[rB];
       if (!dataA || !dataB) {
-        setBetErrors((e) => ({ ...e, [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.` }));
+        setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
         return;
       }
       const result = dataA.points > dataB.points ? "creator"
@@ -1412,7 +1463,7 @@ export default function LeagueSportsbook() {
         const ptsA = getPlayerPts(weekData, members, bet.playerIdA);
         const ptsB = getPlayerPts(weekData, members, bet.playerIdB);
         if (ptsA == null || ptsB == null) {
-          setBetErrors((e) => ({ ...e, [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.` }));
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
           return;
         }
         if (ptsA === ptsB) {
@@ -1431,7 +1482,7 @@ export default function LeagueSportsbook() {
         if (!member) return;
         const actual = lineupFantasyPts(weekData, member.rosterId, member.starters);
         if (actual == null) {
-          setBetErrors((e) => ({ ...e, [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.` }));
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
           return;
         }
         const over = actual > Number(bet.line);
@@ -1446,7 +1497,7 @@ export default function LeagueSportsbook() {
         const rosterId = rosterIdFor(bet.subjectId);
         const data = weekData[rosterId];
         if (!data) {
-          setBetErrors((e) => ({ ...e, [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.` }));
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
           return;
         }
         const actual = data.points;
@@ -1463,7 +1514,7 @@ export default function LeagueSportsbook() {
       }
       const row = Object.values(weekData).find((r) => r.players_points && bet.playerId in r.players_points);
       if (!row) {
-        setBetErrors((e) => ({ ...e, [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.` }));
+        setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
         return;
       }
       const actual = row.players_points[bet.playerId];
@@ -2006,7 +2057,7 @@ export default function LeagueSportsbook() {
         {tab === "board" && (
           <div>
             {renderWeekNav(
-              <button className="sb-btn sb-btn-auto" onClick={() => loadBoardData(activeWeek)} disabled={league.loading}>
+              <button className="sb-btn sb-btn-auto" onClick={() => loadWeekData(activeWeek, { force: true, showSpinner: true })} disabled={league.loading}>
                 <RefreshCw size={12} /> {league.loading ? "Loading…" : "Refresh lines"}
               </button>,
             )}
@@ -2219,7 +2270,7 @@ export default function LeagueSportsbook() {
                   Tap a starter for their O/U line, or pick one from each side for a head-to-head bet.
                 </p>
               </div>
-              <button className="sb-btn sb-btn-auto" onClick={() => loadBoardData(matchupWeek)} disabled={league.loading}>
+              <button className="sb-btn sb-btn-auto" onClick={() => loadWeekData(matchupWeek, { force: true, showSpinner: true })} disabled={league.loading}>
                 <RefreshCw size={12} /> {league.loading ? "Loading…" : "Refresh"}
               </button>
             </div>
@@ -2450,32 +2501,19 @@ export default function LeagueSportsbook() {
               <h3>{league.leagueName}</h3>
               <p className="sb-note">
                 Linked to Sleeper league <span className="sb-mono">{league.leagueId}</span>.
-                Manager names sync from Sleeper and stay linked all season on this device.
+                Scores and projections for weeks 1–{currentWeek} load automatically
+                {loadedWeekCount < currentWeek ? ` (${loadedWeekCount} of ${currentWeek} ready…)` : "."}
               </p>
-              <div className="sb-form-row" style={{ marginBottom: "0.6rem" }}>
-                <div className="sb-field" style={{ maxWidth: 120 }}>
-                  <label style={{ color: "#a9c4b6" }}>Score week</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max={REGULAR_SEASON_WEEKS}
-                    value={scoreLoadWeek}
-                    onChange={(e) => setScoreLoadWeek(e.target.value)}
-                    style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
-                  />
-                </div>
-                <div className="sb-field" style={{ alignSelf: "flex-end" }}>
-                  <p className="sb-note" style={{ margin: 0, color: "#7ea08f" }}>
-                    Current regular season week: <strong>{currentWeek}</strong>
-                  </p>
-                </div>
-              </div>
               <div className="sb-form-actions">
-                <button className="sb-btn sb-btn-submit" onClick={refreshLeague} disabled={league.loading}>
+                <button
+                  className="sb-btn sb-btn-submit"
+                  onClick={async () => {
+                    await refreshLeague();
+                    await prefetchSeasonWeeks(currentWeek, { force: true });
+                  }}
+                  disabled={league.loading}
+                >
                   <RefreshCw size={12} /> {league.loading ? "Syncing…" : "Refresh league"}
-                </button>
-                <button className="sb-btn sb-btn-auto" onClick={loadWeek} disabled={league.loading}>
-                  <Zap size={12} /> Load week {scoreLoadWeek} scores
                 </button>
                 <button className="sb-btn sb-btn-decline" onClick={disconnectLeague}>
                   Disconnect
@@ -2493,8 +2531,10 @@ export default function LeagueSportsbook() {
                   {m.teamName && (
                     <span className="sb-mono" style={{ fontSize: "0.68rem", color: "#7ea08f" }}>{m.displayName}</span>
                   )}
-                  {weekLoaded && m.rosterId && weekData[m.rosterId] && (
-                    <span className="sb-week-points">{weekData[m.rosterId].points} pts (wk {league.week})</span>
+                  {weekCache[currentWeek]?.matchups?.[m.rosterId] && (
+                    <span className="sb-week-points">
+                      {weekCache[currentWeek].matchups[m.rosterId].points} pts (wk {currentWeek})
+                    </span>
                   )}
                 </div>
               ))}

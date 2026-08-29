@@ -21,7 +21,7 @@ function readComponentSource() {
     .replace("export default function LeagueSportsbook", "function LeagueSportsbook");
 }
 
-const iconShim = `const { useState, useMemo, useEffect, useCallback } = React;
+const iconShim = `const { useState, useMemo, useEffect, useCallback, useRef } = React;
 
 function Icon({ children, size = 16, color = "currentColor", style }) {
   return React.createElement("svg", {

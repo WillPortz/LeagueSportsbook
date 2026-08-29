@@ -22,6 +22,7 @@ global.React = {
   useMemo(fn) { return fn(); },
   useEffect() {},
   useCallback(fn) { return fn; },
+  useRef(init) { return { current: init }; },
   Fragment: "fragment",
 };
 

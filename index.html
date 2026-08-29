@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>League Sportsbook</title>
-  <!-- build: 2026-08-29T02:10:23.935Z -->
+  <!-- build: 2026-08-29T02:34:04.117Z -->
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body, #root { margin: 0; min-height: 100%; }
@@ -28,7 +28,8 @@ const {
   useState,
   useMemo,
   useEffect,
-  useCallback
+  useCallback,
+  useRef
 } = React;
 function Icon({
   children,
@@ -183,7 +184,7 @@ const Swords = p => React.createElement(Icon, p, React.createElement("path", {
   d: "m9.5 6.5 2 2"
 }));
 const STORAGE_KEY = "league-book-v1";
-const BUILD_STAMP = "2026-08-29 02:10";
+const BUILD_STAMP = "2026-08-29 02:34";
 const REGULAR_SEASON_WEEKS = 18;
 function resolveRegularSeasonSchedule(nflState, leagueData) {
   const season = Number(leagueData?.season || nflState?.league_season || nflState?.season || new Date().getFullYear());
@@ -899,12 +900,10 @@ function LeagueSportsbook() {
   });
   const [ledgerView, setLedgerView] = useState("weekly");
   const [selectedWeek, setSelectedWeek] = useState(stored?.selectedWeek || stored?.week || 1);
-  const [scoreLoadWeek, setScoreLoadWeek] = useState(stored?.week || 1);
-  const [weekData, setWeekData] = useState({});
-  const [weekLoaded, setWeekLoaded] = useState(false);
-  const [weekLoadedFor, setWeekLoadedFor] = useState(null);
+  const [weekCache, setWeekCache] = useState({});
+  const weekCacheRef = useRef({});
+  const loadingWeeksRef = useRef(new Set());
   const [players, setPlayers] = useState({});
-  const [playerProjections, setPlayerProjections] = useState({});
   const [boardCategory, setBoardCategory] = useState("all");
   const [boardFantasyTeam, setBoardFantasyTeam] = useState("all");
   const [boardPosition, setBoardPosition] = useState("all");
@@ -990,7 +989,6 @@ function LeagueSportsbook() {
         inputId: leagueId.trim()
       }));
       setSelectedWeek(data.week);
-      setScoreLoadWeek(data.week);
       setForm(f => ({
         ...f,
         week: data.week
@@ -1033,7 +1031,6 @@ function LeagueSportsbook() {
         error: null
       }));
       setSelectedWeek(w => clampWeekToSeason(w, data.week));
-      setScoreLoadWeek(data.week);
     } catch {
       setLeague(s => ({
         ...s,
@@ -1061,11 +1058,10 @@ function LeagueSportsbook() {
     setViewer("");
     setSetupViewer("");
     setTicketSeq(TICKET_SEQ);
-    setWeekData({});
-    setWeekLoaded(false);
-    setWeekLoadedFor(null);
+    setWeekCache({});
+    weekCacheRef.current = {};
+    loadingWeeksRef.current.clear();
     setPlayers({});
-    setPlayerProjections({});
     setBoardCategory("all");
     setBoardFantasyTeam("all");
     setBoardPosition("all");
@@ -1084,10 +1080,32 @@ function LeagueSportsbook() {
     // only refresh roster names on first load of a linked league
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  async function loadBoardData(weekNum = league.week) {
-    if (!league.leagueId) return;
+  const loadWeekData = useCallback(async (weekNum, {
+    force = false,
+    showSpinner = false
+  } = {}) => {
+    if (!league.leagueId) return false;
     const wk = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(weekNum) || 1));
-    setLeague(s => ({
+    if (!force && weekCacheRef.current[wk]) return true;
+    if (loadingWeeksRef.current.has(wk)) {
+      return new Promise(resolve => {
+        const started = Date.now();
+        const wait = () => {
+          if (weekCacheRef.current[wk]) {
+            resolve(true);
+            return;
+          }
+          if (!loadingWeeksRef.current.has(wk) || Date.now() - started > 30000) {
+            resolve(false);
+            return;
+          }
+          setTimeout(wait, 100);
+        };
+        wait();
+      });
+    }
+    loadingWeeksRef.current.add(wk);
+    if (showSpinner) setLeague(s => ({
       ...s,
       loading: true,
       error: null
@@ -1107,31 +1125,55 @@ function LeagueSportsbook() {
       const starterIds = members.flatMap(m => m.starters || []);
       const playerInfo = await fetchPlayerInfo(starterIds);
       const projections = await fetchSleeperProjections(wk, season, starterIds, "regular");
-      setWeekData(map);
-      setPlayerProjections(projections);
+      const entry = {
+        matchups: map,
+        projections
+      };
+      weekCacheRef.current = {
+        ...weekCacheRef.current,
+        [wk]: entry
+      };
+      setWeekCache(prev => ({
+        ...prev,
+        [wk]: entry
+      }));
       setPlayers(playerInfo);
-      setWeekLoaded(true);
-      setWeekLoadedFor(wk);
       setLeague(s => ({
         ...s,
-        loading: false,
+        loading: showSpinner ? false : s.loading,
         season,
         week: schedule.currentWeek,
-        nflSeasonType: schedule.nflSeasonType
+        nflSeasonType: schedule.nflSeasonType,
+        error: null
       }));
-      setSelectedWeek(sel => clampWeekToSeason(sel, schedule.currentWeek));
-      setScoreLoadWeek(schedule.currentWeek);
+      if (showSpinner) {
+        setSelectedWeek(sel => clampWeekToSeason(sel, schedule.currentWeek));
+      }
+      return true;
     } catch {
-      setLeague(s => ({
-        ...s,
-        loading: false,
-        error: "Couldn't load Sleeper projections for that week. Try again in a moment."
-      }));
+      if (showSpinner) {
+        setLeague(s => ({
+          ...s,
+          loading: false,
+          error: "Couldn't load Sleeper data for that week. Try again in a moment."
+        }));
+      }
+      return false;
+    } finally {
+      loadingWeeksRef.current.delete(wk);
     }
-  }
-  async function loadWeek(weekNum = scoreLoadWeek) {
-    await loadBoardData(weekNum);
-  }
+  }, [league.leagueId, members]);
+  const prefetchSeasonWeeks = useCallback(async (throughWeek, {
+    force = false
+  } = {}) => {
+    const end = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(throughWeek) || 1));
+    for (let w = 1; w <= end; w++) {
+      if (!force && weekCacheRef.current[w]) continue;
+      await loadWeekData(w, {
+        force
+      });
+    }
+  }, [loadWeekData]);
 
   // ---------- ledger ----------
   const ledger = useMemo(() => computeLedger(bets, members), [bets, members]);
@@ -1180,17 +1222,26 @@ function LeagueSportsbook() {
     size: 16
   }))), extra);
   const matchupWeek = currentWeek;
+  const activeWeekData = weekCache[activeWeek]?.matchups ?? {};
+  const activeProjections = weekCache[activeWeek]?.projections ?? {};
+  const matchupWeekData = weekCache[matchupWeek]?.matchups ?? {};
+  const matchupProjections = weekCache[matchupWeek]?.projections ?? {};
+  const loadedWeekCount = useMemo(() => Object.keys(weekCache).filter(w => Number(w) <= currentWeek).length, [weekCache, currentWeek]);
   useEffect(() => {
     if (!leagueReady || !league.leagueId) return;
-    if (tab !== "board" && tab !== "matchup") return;
-    const weekToLoad = tab === "matchup" ? matchupWeek : activeWeek;
-    if (weekLoadedFor !== weekToLoad) loadBoardData(weekToLoad);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, activeWeek, matchupWeek, leagueReady, league.leagueId]);
+    prefetchSeasonWeeks(currentWeek);
+  }, [leagueReady, league.leagueId, currentWeek, prefetchSeasonWeeks]);
+  useEffect(() => {
+    if (!leagueReady || !league.leagueId) return;
+    const viewWeek = tab === "matchup" ? matchupWeek : activeWeek;
+    loadWeekData(viewWeek, {
+      showSpinner: true
+    });
+  }, [leagueReady, league.leagueId, activeWeek, matchupWeek, tab, loadWeekData]);
   const weekBets = useMemo(() => bets.filter(b => Number(b.week) === activeWeek), [bets, activeWeek]);
   const seasonBets = useMemo(() => bets.filter(b => b.week == null || b.week === ""), [bets]);
   const weeklyLedger = useMemo(() => computeLedger(bets, members, activeWeek), [bets, members, activeWeek]);
-  const boardOfferings = useMemo(() => generateBoardOfferings(members, activeWeek, weekLoadedFor === activeWeek ? weekData : {}, players, playerProjections), [members, activeWeek, weekData, weekLoadedFor, players, playerProjections]);
+  const boardOfferings = useMemo(() => generateBoardOfferings(members, activeWeek, activeWeekData, players, activeProjections), [members, activeWeek, activeWeekData, players, activeProjections]);
   const boardNflTeams = useMemo(() => {
     const teams = new Set();
     Object.values(players).forEach(p => {
@@ -1206,37 +1257,37 @@ function LeagueSportsbook() {
   }), [boardOfferings, boardCategory, boardFantasyTeam, boardPosition, boardNflTeam]);
   const boardEvents = useMemo(() => groupBoardEvents(filteredBoardOfferings, members), [filteredBoardOfferings, members]);
   const viewerMember = useMemo(() => members.find(m => m.id === viewer) || null, [members, viewer]);
-  const matchupDataReady = weekLoadedFor === matchupWeek;
+  const matchupDataReady = !!weekCache[matchupWeek];
   const matchupOpponent = useMemo(() => {
     if (!matchupDataReady || !viewer) return null;
-    return getMatchupOpponent(viewer, members, weekData);
-  }, [matchupDataReady, viewer, members, weekData]);
+    return getMatchupOpponent(viewer, members, matchupWeekData);
+  }, [matchupDataReady, viewer, members, matchupWeekData]);
   const matchupOfferings = useMemo(() => {
     if (!viewerMember || !matchupOpponent || !matchupDataReady) return [];
-    return buildMatchupOfferings(viewerMember, matchupOpponent, matchupWeek, players, playerProjections);
-  }, [viewerMember, matchupOpponent, matchupWeek, players, playerProjections, matchupDataReady]);
-  const myStarterRows = useMemo(() => viewerMember && matchupDataReady ? starterRows(viewerMember, players, playerProjections, weekData) : [], [viewerMember, players, playerProjections, weekData, matchupDataReady]);
-  const oppStarterRows = useMemo(() => matchupOpponent && matchupDataReady ? starterRows(matchupOpponent, players, playerProjections, weekData) : [], [matchupOpponent, players, playerProjections, weekData, matchupDataReady]);
-  const myLineupProj = viewerMember ? sumLineupLine(viewerMember, players, playerProjections) : 0;
-  const oppLineupProj = matchupOpponent ? sumLineupLine(matchupOpponent, players, playerProjections) : 0;
-  const myStarterPicks = useMemo(() => starterPickOptions(viewerMember, players, playerProjections), [viewerMember, players, playerProjections]);
+    return buildMatchupOfferings(viewerMember, matchupOpponent, matchupWeek, players, matchupProjections);
+  }, [viewerMember, matchupOpponent, matchupWeek, players, matchupProjections, matchupDataReady]);
+  const myStarterRows = useMemo(() => viewerMember && matchupDataReady ? starterRows(viewerMember, players, matchupProjections, matchupWeekData) : [], [viewerMember, players, matchupProjections, matchupWeekData, matchupDataReady]);
+  const oppStarterRows = useMemo(() => matchupOpponent && matchupDataReady ? starterRows(matchupOpponent, players, matchupProjections, matchupWeekData) : [], [matchupOpponent, players, matchupProjections, matchupWeekData, matchupDataReady]);
+  const myLineupProj = viewerMember ? sumLineupLine(viewerMember, players, matchupProjections) : 0;
+  const oppLineupProj = matchupOpponent ? sumLineupLine(matchupOpponent, players, matchupProjections) : 0;
+  const myStarterPicks = useMemo(() => starterPickOptions(viewerMember, players, activeProjections), [viewerMember, players, activeProjections]);
   const customOppMember = useMemo(() => members.find(m => m.id === customH2H.oppMemberId) || null, [members, customH2H.oppMemberId]);
   const myPlayerMeta = players[customH2H.myPlayerId];
   const oppPosFilter = customMatchPos && myPlayerMeta?.position ? myPlayerMeta.position : "all";
-  const oppStarterPicks = useMemo(() => starterPickOptions(customOppMember, players, playerProjections, oppPosFilter), [customOppMember, players, playerProjections, oppPosFilter]);
-  const customH2hOffering = useMemo(() => buildCustomH2hOffering(viewer, customH2H.myPlayerId, customH2H.oppMemberId, customH2H.oppPlayerId, activeWeek, players, playerProjections, members), [viewer, customH2H, activeWeek, players, playerProjections, members]);
+  const oppStarterPicks = useMemo(() => starterPickOptions(customOppMember, players, activeProjections, oppPosFilter), [customOppMember, players, activeProjections, oppPosFilter]);
+  const customH2hOffering = useMemo(() => buildCustomH2hOffering(viewer, customH2H.myPlayerId, customH2H.oppMemberId, customH2H.oppPlayerId, activeWeek, players, activeProjections, members), [viewer, customH2H, activeWeek, players, activeProjections, members]);
   const matchupBetOffering = useMemo(() => {
     const {
       my,
       opp
     } = matchupPlayerPick;
     if (my && opp && matchupOpponent) {
-      return buildCustomH2hOffering(viewer, my, matchupOpponent.id, opp, matchupWeek, players, playerProjections, members);
+      return buildCustomH2hOffering(viewer, my, matchupOpponent.id, opp, matchupWeek, players, matchupProjections, members);
     }
     const singleId = my || opp;
     if (!singleId) return null;
     return matchupOfferings.find(o => o.kind === "player_ou" && o.playerId === singleId) || null;
-  }, [matchupPlayerPick, matchupOpponent, viewer, matchupWeek, players, playerProjections, members, matchupOfferings]);
+  }, [matchupPlayerPick, matchupOpponent, viewer, matchupWeek, players, matchupProjections, members, matchupOfferings]);
   useEffect(() => {
     setMatchupPlayerPick({
       my: "",
@@ -1363,7 +1414,7 @@ function LeagueSportsbook() {
       className: `sb-matchup-team${isYou ? " you" : ""}`
     }, /*#__PURE__*/React.createElement("h4", null, member.name, isYou ? " (You)" : ""), /*#__PURE__*/React.createElement("div", {
       className: "sb-matchup-total"
-    }, "Upcoming Sleeper PPR proj: ", /*#__PURE__*/React.createElement("strong", null, totalProj), weekData[member.rosterId]?.points != null && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 Actual: ", /*#__PURE__*/React.createElement("strong", null, weekData[member.rosterId].points))), rows.map(row => /*#__PURE__*/React.createElement("button", {
+    }, "Upcoming Sleeper PPR proj: ", /*#__PURE__*/React.createElement("strong", null, totalProj), matchupWeekData[member.rosterId]?.points != null && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 Actual: ", /*#__PURE__*/React.createElement("strong", null, matchupWeekData[member.rosterId].points))), rows.map(row => /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: `sb-matchup-player${selectedId === row.pid ? " selected" : ""}`,
       key: row.pid,
@@ -1497,11 +1548,21 @@ function LeagueSportsbook() {
       return b;
     }));
   }
-  function autoGrade(bet) {
+  async function autoGrade(bet) {
     setBetErrors(e => ({
       ...e,
       [bet.id]: null
     }));
+    const wk = Number(bet.week) || currentWeek;
+    const loaded = await loadWeekData(wk);
+    const weekData = weekCacheRef.current[wk]?.matchups ?? {};
+    if (!loaded || !Object.keys(weekData).length) {
+      setBetErrors(e => ({
+        ...e,
+        [bet.id]: `Couldn't load week ${wk} scores from Sleeper — try again in a moment.`
+      }));
+      return;
+    }
     if (bet.type === "matchup") {
       const rA = rosterIdFor(bet.creator);
       const rB = rosterIdFor(bet.opponent);
@@ -1527,7 +1588,7 @@ function LeagueSportsbook() {
         if (ptsPick == null || ptsPeer == null) {
           setBetErrors(e => ({
             ...e,
-            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+            [bet.id]: `Week ${wk} scores aren't available yet.`
           }));
           return;
         }
@@ -1552,7 +1613,7 @@ function LeagueSportsbook() {
       if (!dataA || !dataB) {
         setBetErrors(e => ({
           ...e,
-          [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+          [bet.id]: `Week ${wk} scores aren't available yet.`
         }));
         return;
       }
@@ -1578,7 +1639,7 @@ function LeagueSportsbook() {
         if (ptsA == null || ptsB == null) {
           setBetErrors(e => ({
             ...e,
-            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+            [bet.id]: `Week ${wk} scores aren't available yet.`
           }));
           return;
         }
@@ -1605,7 +1666,7 @@ function LeagueSportsbook() {
         if (actual == null) {
           setBetErrors(e => ({
             ...e,
-            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+            [bet.id]: `Week ${wk} scores aren't available yet.`
           }));
           return;
         }
@@ -1625,7 +1686,7 @@ function LeagueSportsbook() {
         if (!data) {
           setBetErrors(e => ({
             ...e,
-            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+            [bet.id]: `Week ${wk} scores aren't available yet.`
           }));
           return;
         }
@@ -1651,7 +1712,7 @@ function LeagueSportsbook() {
       if (!row) {
         setBetErrors(e => ({
           ...e,
-          [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+          [bet.id]: `Week ${wk} scores aren't available yet.`
         }));
         return;
       }
@@ -2307,7 +2368,10 @@ function LeagueSportsbook() {
     onClick: () => setShowForm(false)
   }, "Cancel")))), tab === "board" && /*#__PURE__*/React.createElement("div", null, renderWeekNav(/*#__PURE__*/React.createElement("button", {
     className: "sb-btn sb-btn-auto",
-    onClick: () => loadBoardData(activeWeek),
+    onClick: () => loadWeekData(activeWeek, {
+      force: true,
+      showSpinner: true
+    }),
     disabled: league.loading
   }, /*#__PURE__*/React.createElement(RefreshCw, {
     size: 12
@@ -2502,7 +2566,10 @@ function LeagueSportsbook() {
     }
   }, "Tap a starter for their O/U line, or pick one from each side for a head-to-head bet.")), /*#__PURE__*/React.createElement("button", {
     className: "sb-btn sb-btn-auto",
-    onClick: () => loadBoardData(matchupWeek),
+    onClick: () => loadWeekData(matchupWeek, {
+      force: true,
+      showSpinner: true
+    }),
     disabled: league.loading
   }, /*#__PURE__*/React.createElement(RefreshCw, {
     size: 12
@@ -2726,57 +2793,20 @@ function LeagueSportsbook() {
     className: "sb-note"
   }, "Linked to Sleeper league ", /*#__PURE__*/React.createElement("span", {
     className: "sb-mono"
-  }, league.leagueId), ". Manager names sync from Sleeper and stay linked all season on this device."), /*#__PURE__*/React.createElement("div", {
-    className: "sb-form-row",
-    style: {
-      marginBottom: "0.6rem"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    className: "sb-field",
-    style: {
-      maxWidth: 120
-    }
-  }, /*#__PURE__*/React.createElement("label", {
-    style: {
-      color: "#a9c4b6"
-    }
-  }, "Score week"), /*#__PURE__*/React.createElement("input", {
-    type: "number",
-    min: "1",
-    max: REGULAR_SEASON_WEEKS,
-    value: scoreLoadWeek,
-    onChange: e => setScoreLoadWeek(e.target.value),
-    style: {
-      background: "#0e211b",
-      color: "var(--paper)",
-      borderColor: "var(--line)"
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    className: "sb-field",
-    style: {
-      alignSelf: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("p", {
-    className: "sb-note",
-    style: {
-      margin: 0,
-      color: "#7ea08f"
-    }
-  }, "Current regular season week: ", /*#__PURE__*/React.createElement("strong", null, currentWeek)))), /*#__PURE__*/React.createElement("div", {
+  }, league.leagueId), ". Scores and projections for weeks 1\u2013", currentWeek, " load automatically", loadedWeekCount < currentWeek ? ` (${loadedWeekCount} of ${currentWeek} ready…)` : "."), /*#__PURE__*/React.createElement("div", {
     className: "sb-form-actions"
   }, /*#__PURE__*/React.createElement("button", {
     className: "sb-btn sb-btn-submit",
-    onClick: refreshLeague,
+    onClick: async () => {
+      await refreshLeague();
+      await prefetchSeasonWeeks(currentWeek, {
+        force: true
+      });
+    },
     disabled: league.loading
   }, /*#__PURE__*/React.createElement(RefreshCw, {
     size: 12
   }), " ", league.loading ? "Syncing…" : "Refresh league"), /*#__PURE__*/React.createElement("button", {
-    className: "sb-btn sb-btn-auto",
-    onClick: loadWeek,
-    disabled: league.loading
-  }, /*#__PURE__*/React.createElement(Zap, {
-    size: 12
-  }), " Load week ", scoreLoadWeek, " scores"), /*#__PURE__*/React.createElement("button", {
     className: "sb-btn sb-btn-decline",
     onClick: disconnectLeague
   }, "Disconnect")), league.error && /*#__PURE__*/React.createElement("div", {
@@ -2798,9 +2828,9 @@ function LeagueSportsbook() {
       fontSize: "0.68rem",
       color: "#7ea08f"
     }
-  }, m.displayName), weekLoaded && m.rosterId && weekData[m.rosterId] && /*#__PURE__*/React.createElement("span", {
+  }, m.displayName), weekCache[currentWeek]?.matchups?.[m.rosterId] && /*#__PURE__*/React.createElement("span", {
     className: "sb-week-points"
-  }, weekData[m.rosterId].points, " pts (wk ", league.week, ")"))))))), renderBetSlipBar());
+  }, weekCache[currentWeek].matchups[m.rosterId].points, " pts (wk ", currentWeek, ")"))))))), renderBetSlipBar());
 }
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(React.createElement(LeagueSportsbook));
