@@ -215,6 +215,9 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-matchup-player:first-of-type { border-top: none; }
 .sb-matchup-player:hover { background: rgba(255,255,255,0.04); }
 .sb-matchup-player.selected { background: rgba(201, 162, 39, 0.12); outline: 1px solid var(--gold); }
+.sb-matchup-player.bench { opacity: 0.7; }
+.sb-matchup-player.bench.selected { opacity: 1; }
+.sb-matchup-bench-tag { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.58rem; letter-spacing: 0.04em; color: #7ea08f; border: 1px solid var(--line); border-radius: 3px; padding: 0 0.3rem; margin-left: 0.4rem; vertical-align: 1px; }
 .sb-matchup-pos { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
 .sb-matchup-name { font-weight: 500; }
 .sb-matchup-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }

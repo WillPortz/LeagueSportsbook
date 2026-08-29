@@ -99,8 +99,19 @@ function liveStarters(member, weekData) {
   return live.length ? live : (member?.starters || []);
 }
 
+function liveRoster(member, weekData) {
+  const live = (weekData?.[member?.rosterId]?.players || []).filter((id) => id && id !== "0");
+  return live.length ? live : (member?.starters || []);
+}
+
+// `.starters` stays the true starting lineup (projections/lineup totals depend on it staying
+// accurate); `.roster` is the full roster — starters plus bench — for display/picking purposes.
 function withLiveStarters(members, weekData) {
-  return members.map((m) => ({ ...m, starters: liveStarters(m, weekData) }));
+  return members.map((m) => ({
+    ...m,
+    starters: liveStarters(m, weekData),
+    roster: liveRoster(m, weekData),
+  }));
 }
 
 function getWeekPairs(weekData, members) {
@@ -544,9 +555,12 @@ function buildMatchupOfferings(me, opp, week, players, projections, scoringLabel
 }
 
 function starterRows(member, players, projections, weekData) {
-  return (member?.starters || []).map((pid) => {
+  const starterIds = member?.starters || [];
+  const startingSet = new Set(starterIds);
+  const benchIds = (member?.roster || []).filter((pid) => !startingSet.has(pid));
+  const row = weekData[member.rosterId];
+  return [...starterIds, ...benchIds].map((pid) => {
     const p = players[pid] || { name: `Player ${pid}`, position: "?", team: null };
-    const row = weekData[member.rosterId];
     const actual = row?.players_points?.[pid];
     return {
       pid,
@@ -555,6 +569,7 @@ function starterRows(member, players, projections, weekData) {
       team: p.team,
       proj: sleeperProj(pid, projections),
       actual: actual != null ? actual : null,
+      isStarter: startingSet.has(pid),
     };
   });
 }
@@ -599,6 +614,33 @@ function buildCustomH2hOffering(viewerId, myPlayerId, oppMemberId, oppPlayerId, 
         sublabel: `${oppP.position} · ${formatProj(lineB)} Sleeper proj`,
         odds: americanOdds(1 - prob),
       },
+    ],
+  };
+}
+
+// Builds an O/U market for any single player on the fly — used when someone taps just one
+// roster player (starter or bench) in the Matchup tab, rather than only the pre-featured
+// starters that already have a market built for them.
+function buildSinglePlayerOuOffering(pid, ownerId, counterpartyId, week, players, projections) {
+  const p = players[pid];
+  if (!p) return null;
+  const rawProj = sleeperProj(pid, projections);
+  const line = betLineFromProj(rawProj);
+  if (line == null) return null;
+  return {
+    id: `pou-${week}-${pid}`,
+    kind: "player_ou",
+    type: "prop",
+    week,
+    title: `${p.name} O/U ${formatProj(line)} fantasy pts`,
+    subtitle: `${p.position}${p.team ? ` · ${p.team}` : ""} · Sleeper proj ${formatProj(rawProj)}`,
+    playerId: pid,
+    ownerId,
+    counterpartyId,
+    line,
+    sides: [
+      { key: "over", label: `Over ${formatProj(line)}`, odds: -110, pick: "over" },
+      { key: "under", label: `Under ${formatProj(line)}`, odds: -110, pick: "under" },
     ],
   };
 }
@@ -1064,17 +1106,17 @@ export default function LeagueSportsbook({ session }) {
       const map = {};
       current.forEach((row) => { map[row.roster_id] = row; });
 
-      const matchupStarterIds = [...new Set(
-        current.flatMap((row) => (row.starters || []).filter((id) => id && id !== "0")),
+      const matchupRosterIds = [...new Set(
+        current.flatMap((row) => (row.players?.length ? row.players : row.starters || []).filter((id) => id && id !== "0")),
       )];
-      const starterIds = matchupStarterIds.length
-        ? matchupStarterIds
+      const rosterIds = matchupRosterIds.length
+        ? matchupRosterIds
         : members.flatMap((m) => m.starters || []);
-      const playerInfo = await fetchPlayerInfo(starterIds);
+      const playerInfo = await fetchPlayerInfo(rosterIds);
       const projections = await fetchSleeperProjections(
         wk,
         projectionSeason,
-        starterIds,
+        rosterIds,
         "regular",
         scoring.field,
         leagueData?.scoring_settings || null,
@@ -1345,8 +1387,10 @@ export default function LeagueSportsbook({ session }) {
       );
     }
     const singleId = my || opp;
-    if (!singleId) return null;
-    return matchupOfferings.find((o) => o.kind === "player_ou" && o.playerId === singleId) || null;
+    if (!singleId || !matchupOpponent) return null;
+    const ownerId = my ? viewer : matchupOpponent.id;
+    const counterpartyId = my ? matchupOpponent.id : viewer;
+    return buildSinglePlayerOuOffering(singleId, ownerId, counterpartyId, matchupWeek, players, matchupProjections);
   }, [
     matchupPlayerPick,
     matchupOpponent,
@@ -1354,8 +1398,6 @@ export default function LeagueSportsbook({ session }) {
     matchupWeek,
     players,
     matchupProjections,
-    members,
-    matchupOfferings,
   ]);
 
   useEffect(() => {
@@ -1478,14 +1520,17 @@ export default function LeagueSportsbook({ session }) {
         {rows.map((row) => (
           <button
             type="button"
-            className={`sb-matchup-player${selectedId === row.pid ? " selected" : ""}`}
+            className={`sb-matchup-player${row.isStarter ? "" : " bench"}${selectedId === row.pid ? " selected" : ""}`}
             key={row.pid}
             onClick={() => handleMatchupPlayerClick(row.pid, isYou)}
             title={isYou ? "Tap to bet this player" : "Tap to bet against this player"}
           >
             <span className="sb-matchup-pos">{row.position}</span>
             <div>
-              <div className="sb-matchup-name">{row.name}</div>
+              <div className="sb-matchup-name">
+                {row.name}
+                {!row.isStarter && <span className="sb-matchup-bench-tag">BN</span>}
+              </div>
               {row.team && <div className="sb-matchup-meta">{row.team}</div>}
             </div>
             <span className="sb-matchup-proj" title={`Sleeper ${league.scoringLabel} projection`}>{formatProj(row.proj)}</span>
