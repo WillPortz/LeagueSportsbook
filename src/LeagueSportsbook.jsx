@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
-  Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, ScrollText,
+  Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, User, ScrollText,
   Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords,
 } from "lucide-react";
 import * as leaguesApi from "./lib/leaguesApi.js";
@@ -646,7 +646,8 @@ function buildSinglePlayerOuOffering(pid, ownerId, counterpartyId, week, players
 }
 
 function starterPickOptions(member, players, projections, positionFilter = "all") {
-  return (member?.starters || [])
+  const roster = member?.roster?.length ? member.roster : (member?.starters || []);
+  return roster
     .filter((pid) => {
       if (!players[pid]) return false;
       if (positionFilter === "all") return true;
@@ -662,6 +663,22 @@ function starterPickOptions(member, players, projections, positionFilter = "all"
         proj: sleeperProj(pid, projections),
       };
     });
+}
+
+function findPlayerOwner(members, pid) {
+  if (!pid) return null;
+  return members.find((m) => (m.roster?.length ? m.roster : m.starters || []).includes(pid)) || null;
+}
+
+// The money-opponent a given side click would resolve to — an explicit counterpartyId
+// (set by the Bet Builder) always wins; otherwise infer from the un-picked side, matching
+// placeBoardBet's own resolution so a click is never allowed to make you your own opponent.
+function computeOpponentFor(offering, side, viewer) {
+  if (offering.counterpartyId) return offering.counterpartyId;
+  if (offering.kind === "lineup_ml" || offering.kind === "player_h2h") {
+    return side.memberId === offering.memberA ? offering.memberB : offering.memberA;
+  }
+  return null;
 }
 
 function groupBoardEvents(offerings, members) {
@@ -703,7 +720,6 @@ function groupBoardEvents(offerings, members) {
 }
 
 function filterBoardOfferings(offerings, { category, fantasyTeam, position, nflTeam }) {
-  if (category === "battles") return [];
   return offerings.filter((o) => {
     if (category !== "all" && o.category !== category) return false;
     if (fantasyTeam !== "all") {
@@ -726,6 +742,18 @@ const TYPE_LABEL = {
   season: "Season Future",
   proposition: "League Prop",
 };
+
+const BOARD_KIND_LABEL = {
+  lineup_ml: "Matchup",
+  lineup_spread: "Matchup",
+  lineup_ou: "Point Total",
+  player_ou: "Player Prop",
+  player_h2h: "Player vs Player",
+};
+
+function ticketTypeLabel(bet) {
+  return BOARD_KIND_LABEL[bet.boardKind] || TYPE_LABEL[bet.type];
+}
 
 const AUTO_GRADABLE = { matchup: true, prop: true, season: false, proposition: false };
 
@@ -848,6 +876,13 @@ export default function LeagueSportsbook({ session }) {
   const [customH2H, setCustomH2H] = useState({ myPlayerId: "", oppMemberId: "", oppPlayerId: "" });
   const [customMatchPos, setCustomMatchPos] = useState(true);
   const [matchupPlayerPick, setMatchupPlayerPick] = useState({ my: "", opp: "" });
+
+  // ---------- Create Side Bet builder ----------
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderCategory, setBuilderCategory] = useState(null); // 'matchup' | 'total' | 'prop' | 'battle' | null
+  const [matchupBuilder, setMatchupBuilder] = useState({ opponent: "", format: "moneyline", spreadLine: "" });
+  const [totalBuilder, setTotalBuilder] = useState({ subjectId: "", opponent: "", line: "" });
+  const [propBuilder, setPropBuilder] = useState({ playerId: "", opponent: "", line: "" });
 
   const nameOf = useCallback(
     (id) => members.find((m) => m.id === id)?.name || id,
@@ -1420,9 +1455,7 @@ export default function LeagueSportsbook({ session }) {
   const boardStake = () => Number(globalStake) || 10;
 
   const selectBetPick = (offering, side) => {
-    const disabled = side.memberId === viewer
-      && (offering.kind === "lineup_ml" || offering.kind === "player_h2h");
-    if (disabled) return;
+    if (computeOpponentFor(offering, side, viewer) === viewer) return;
     setBetSlipPick({ offering, side });
   };
 
@@ -1434,8 +1467,7 @@ export default function LeagueSportsbook({ session }) {
       </div>
       <div className="dk-odds-row">
         {o.sides.map((side) => {
-          const disabled = side.memberId === viewer
-            && (o.kind === "lineup_ml" || o.kind === "player_h2h");
+          const disabled = computeOpponentFor(o, side, viewer) === viewer;
           const selected = betSlipPick?.offering?.id === o.id && betSlipPick?.side?.key === side.key;
           return (
             <button
@@ -1563,7 +1595,8 @@ export default function LeagueSportsbook({ session }) {
     };
 
     if (offering.kind === "lineup_ml") {
-      opponent = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
+      opponent = offering.counterpartyId
+        || (side.memberId === offering.memberA ? offering.memberB : offering.memberA);
       if (opponent === viewer) {
         window.alert("Pick the other side — you can't bet against yourself.");
         return;
@@ -1572,6 +1605,16 @@ export default function LeagueSportsbook({ session }) {
       bet.pickMemberId = side.memberId;
       bet.matchupPeerId = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
       title = `${nameOf(side.memberId)} lineup beats ${nameOf(opponent)} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
+      bet.title = title;
+    } else if (offering.kind === "lineup_spread") {
+      opponent = offering.counterpartyId;
+      if (!opponent || opponent === viewer) return;
+      bet.opponent = opponent;
+      bet.subjectId = offering.favoriteId;
+      bet.matchupPeerId = offering.underdogId;
+      bet.line = offering.line;
+      bet.creatorSide = side.pick;
+      title = `${side.label} covers @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "player_ou") {
       opponent = offering.counterpartyId
@@ -1586,7 +1629,8 @@ export default function LeagueSportsbook({ session }) {
       title = `${playerLabel(players, offering.playerId)} ${side.pick === "over" ? "Over" : "Under"} ${offering.line} pts @ ${formatOdds(side.odds)}`;
       bet.title = title;
     } else if (offering.kind === "lineup_ou") {
-      opponent = members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
+      opponent = offering.counterpartyId
+        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
         || members.find((m) => m.id !== viewer)?.id;
       if (!opponent) return;
       bet.opponent = opponent;
@@ -1617,6 +1661,345 @@ export default function LeagueSportsbook({ session }) {
     setBetSlipPick(null);
     setTab("slips");
     setSelectedWeek(offering.week ?? activeWeek);
+  }
+
+  function openBuilderCategory(cat) {
+    const oppDefault = matchupOpponent?.id || defaultOpponent;
+    if (cat === "matchup") setMatchupBuilder((f) => ({ ...f, opponent: f.opponent || oppDefault }));
+    if (cat === "total") setTotalBuilder((f) => ({ ...f, subjectId: f.subjectId || viewer, opponent: f.opponent || oppDefault }));
+    if (cat === "prop") setPropBuilder((f) => ({ ...f, opponent: f.opponent || oppDefault }));
+    setBuilderCategory(cat);
+  }
+
+  const renderBuilderBack = (label) => (
+    <button type="button" className="sb-builder-back" onClick={() => setBuilderCategory(null)}>
+      <ChevronLeft size={16} /> {label}
+    </button>
+  );
+
+  function renderBuilderCategoryPicker() {
+    return (
+      <>
+        <h3>Create Side Bet</h3>
+        <p className="sb-note" style={{ color: "#6b6144" }}>
+          Rosters, projections, and scores come straight from Sleeper — just pick numbers and sides.
+        </p>
+        <div className="sb-builder-categories">
+          <button type="button" className="sb-builder-category-btn" onClick={() => openBuilderCategory("matchup")}>
+            <Swords size={20} />
+            <span className="sb-builder-category-title">Matchup</span>
+            <span className="sb-builder-category-sub">Who wins — moneyline or spread</span>
+          </button>
+          <button type="button" className="sb-builder-category-btn" onClick={() => openBuilderCategory("total")}>
+            <TrendingUp size={20} />
+            <span className="sb-builder-category-title">Point Total</span>
+            <span className="sb-builder-category-sub">Over/under on a team's score</span>
+          </button>
+          <button type="button" className="sb-builder-category-btn" onClick={() => openBuilderCategory("prop")}>
+            <User size={20} />
+            <span className="sb-builder-category-title">Player Prop</span>
+            <span className="sb-builder-category-sub">Over/under on one player</span>
+          </button>
+          <button type="button" className="sb-builder-category-btn" onClick={() => openBuilderCategory("battle")}>
+            <Users size={20} />
+            <span className="sb-builder-category-title">Player vs Player</span>
+            <span className="sb-builder-category-sub">Whose player scores more</span>
+          </button>
+        </div>
+        <div className="sb-form-actions" style={{ marginTop: "0.85rem" }}>
+          <button type="button" className="sb-btn sb-btn-cancel" onClick={() => { setBuilderOpen(false); setShowForm(true); }}>
+            Need something else? Write a custom slip
+          </button>
+          <button type="button" className="sb-btn sb-btn-cancel" onClick={() => setBuilderOpen(false)}>Cancel</button>
+        </div>
+      </>
+    );
+  }
+
+  function renderMatchupBuilder() {
+    const oppMember = activeWeekMembers.find((m) => m.id === matchupBuilder.opponent) || null;
+    const myProj = sumLineupProjections(boardViewerMember, activeProjections) ?? 0;
+    const oppProj = oppMember ? (sumLineupProjections(oppMember, activeProjections) ?? 0) : 0;
+    const probMe = winProbFromSpread(myProj - oppProj);
+    const favoriteIsMe = myProj >= oppProj;
+    const defaultSpread = Math.round(Math.abs(myProj - oppProj) * 2) / 2 || 0.5;
+    const spreadLine = Number(matchupBuilder.spreadLine) || defaultSpread;
+
+    let offering = null;
+    if (oppMember) {
+      if (matchupBuilder.format === "moneyline") {
+        offering = {
+          id: `builder-ml-${activeWeek}-${viewer}-${oppMember.id}`,
+          kind: "lineup_ml", type: "matchup", week: activeWeek,
+          title: `${nameOf(viewer)} vs ${oppMember.name} — moneyline`,
+          subtitle: `Week ${activeWeek} · proj ${formatProj(myProj)} vs ${formatProj(oppProj)}`,
+          memberA: viewer, memberB: oppMember.id,
+          counterpartyId: oppMember.id,
+          sides: [
+            { key: "a", memberId: viewer, label: nameOf(viewer), odds: americanOdds(probMe) },
+            { key: "b", memberId: oppMember.id, label: oppMember.name, odds: americanOdds(1 - probMe) },
+          ],
+        };
+      } else {
+        const favoriteId = favoriteIsMe ? viewer : oppMember.id;
+        const underdogId = favoriteIsMe ? oppMember.id : viewer;
+        offering = {
+          id: `builder-spread-${activeWeek}-${viewer}-${oppMember.id}`,
+          kind: "lineup_spread", type: "matchup", week: activeWeek,
+          title: `${nameOf(viewer)} vs ${oppMember.name} — spread`,
+          subtitle: `Week ${activeWeek} · proj ${formatProj(myProj)} vs ${formatProj(oppProj)}`,
+          favoriteId, underdogId,
+          counterpartyId: oppMember.id,
+          line: spreadLine,
+          sides: [
+            { key: "fav", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "over", odds: -110 },
+            { key: "dog", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "under", odds: -110 },
+          ],
+        };
+      }
+    }
+
+    return (
+      <>
+        {renderBuilderBack("Matchup")}
+        <div className="sb-form-row">
+          <div className="sb-field">
+            <label>Opponent</label>
+            <select value={matchupBuilder.opponent} onChange={(e) => setMatchupBuilder((f) => ({ ...f, opponent: e.target.value }))}>
+              <option value="">Select a manager…</option>
+              {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        </div>
+        {oppMember && (
+          <>
+            <p className="sb-note" style={{ color: "#6b6144" }}>
+              Projected: {nameOf(viewer)} {formatProj(myProj)} · {oppMember.name} {formatProj(oppProj)} · {nameOf(viewer)} win probability {Math.round(probMe * 100)}%
+            </p>
+            <div className="sb-format-toggle">
+              <button type="button" className={matchupBuilder.format === "moneyline" ? "active" : ""} onClick={() => setMatchupBuilder((f) => ({ ...f, format: "moneyline" }))}>Moneyline</button>
+              <button type="button" className={matchupBuilder.format === "spread" ? "active" : ""} onClick={() => setMatchupBuilder((f) => ({ ...f, format: "spread" }))}>Custom Spread</button>
+            </div>
+            {matchupBuilder.format === "spread" && (
+              <div className="sb-field" style={{ maxWidth: 140 }}>
+                <label>Spread (pts)</label>
+                <input type="number" min="0.5" step="0.5" value={matchupBuilder.spreadLine || defaultSpread}
+                  onChange={(e) => setMatchupBuilder((f) => ({ ...f, spreadLine: e.target.value }))} />
+              </div>
+            )}
+            {offering && renderMarketRow(offering)}
+          </>
+        )}
+      </>
+    );
+  }
+
+  function renderTotalBuilder() {
+    const subjMember = activeWeekMembers.find((m) => m.id === totalBuilder.subjectId) || boardViewerMember;
+    const oppMember = activeWeekMembers.find((m) => m.id === totalBuilder.opponent) || null;
+    const subjProj = subjMember ? (sumLineupProjections(subjMember, activeProjections) ?? 0) : 0;
+    const defaultLine = betLineFromProj(subjProj) ?? 0;
+    const line = totalBuilder.line !== "" ? Number(totalBuilder.line) : defaultLine;
+
+    const offering = (subjMember && oppMember) ? {
+      id: `builder-total-${activeWeek}-${subjMember.id}`,
+      kind: "lineup_ou", type: "prop", week: activeWeek,
+      title: `${subjMember.name} lineup O/U ${formatProj(line)} fantasy pts`,
+      subtitle: `Week ${activeWeek} · projected ${formatProj(subjProj)}`,
+      subjectId: subjMember.id,
+      counterpartyId: oppMember.id,
+      line,
+      sides: [
+        { key: "over", label: `Over ${formatProj(line)}`, pick: "over", odds: -110 },
+        { key: "under", label: `Under ${formatProj(line)}`, pick: "under", odds: -110 },
+      ],
+    } : null;
+
+    return (
+      <>
+        {renderBuilderBack("Point Total")}
+        <div className="sb-form-row">
+          <div className="sb-field">
+            <label>Team</label>
+            <select value={totalBuilder.subjectId} onChange={(e) => setTotalBuilder((f) => ({ ...f, subjectId: e.target.value, line: "" }))}>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div className="sb-field">
+            <label>Against</label>
+            <select value={totalBuilder.opponent} onChange={(e) => setTotalBuilder((f) => ({ ...f, opponent: e.target.value }))}>
+              <option value="">Select a manager…</option>
+              {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div className="sb-field" style={{ maxWidth: 120 }}>
+            <label>Line</label>
+            <input type="number" step="0.5" value={totalBuilder.line || (subjMember ? defaultLine : "")}
+              onChange={(e) => setTotalBuilder((f) => ({ ...f, line: e.target.value }))} />
+          </div>
+        </div>
+        {subjMember && (
+          <p className="sb-note" style={{ color: "#6b6144" }}>
+            {subjMember.name}&rsquo;s live Sleeper projection: {formatProj(subjProj)} pts
+          </p>
+        )}
+        {offering && renderMarketRow(offering)}
+      </>
+    );
+  }
+
+  function renderPropBuilder() {
+    const ownerMember = findPlayerOwner(activeWeekMembers, propBuilder.playerId);
+    const proj = propBuilder.playerId ? sleeperProj(propBuilder.playerId, activeProjections) : null;
+    const defaultLine = betLineFromProj(proj) ?? 0;
+    const line = propBuilder.line !== "" ? Number(propBuilder.line) : defaultLine;
+    const oppMember = members.find((m) => m.id === propBuilder.opponent) || null;
+
+    let offering = null;
+    if (propBuilder.playerId && oppMember) {
+      offering = buildSinglePlayerOuOffering(propBuilder.playerId, ownerMember?.id || null, oppMember.id, activeWeek, players, activeProjections);
+      if (offering) offering.line = line;
+    }
+
+    return (
+      <>
+        {renderBuilderBack("Player Prop")}
+        <div className="sb-form-row">
+          <div className="sb-field">
+            <label>Player</label>
+            <select value={propBuilder.playerId} onChange={(e) => {
+              const pid = e.target.value;
+              const owner = findPlayerOwner(activeWeekMembers, pid);
+              setPropBuilder((f) => ({
+                ...f,
+                playerId: pid,
+                opponent: f.opponent || (owner && owner.id !== viewer ? owner.id : defaultOpponent),
+                line: "",
+              }));
+            }}>
+              <option value="">Select a player…</option>
+              {activeWeekMembers.map((m) => (
+                <optgroup key={m.id} label={m.name}>
+                  {(m.roster?.length ? m.roster : m.starters || [])
+                    .filter((pid) => players[pid])
+                    .map((pid) => (
+                      <option key={pid} value={pid}>{players[pid].name} ({players[pid].position})</option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <div className="sb-field">
+            <label>Against</label>
+            <select value={propBuilder.opponent} onChange={(e) => setPropBuilder((f) => ({ ...f, opponent: e.target.value }))}>
+              <option value="">Select a manager…</option>
+              {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div className="sb-field" style={{ maxWidth: 120 }}>
+            <label>Line</label>
+            <input type="number" step="0.5" value={propBuilder.line || (propBuilder.playerId ? defaultLine : "")}
+              onChange={(e) => setPropBuilder((f) => ({ ...f, line: e.target.value }))} />
+          </div>
+        </div>
+        {ownerMember && (
+          <p className="sb-note" style={{ color: "#6b6144" }}>
+            Owned by {ownerMember.name} · Sleeper projection {formatProj(proj)} pts
+          </p>
+        )}
+        {offering && renderMarketRow(offering)}
+      </>
+    );
+  }
+
+  function renderBattleBuilder() {
+    return (
+      <>
+        {renderBuilderBack("Player vs Player")}
+        <label className="dk-custom-toggle">
+          <input
+            type="checkbox"
+            checked={customMatchPos}
+            onChange={(e) => {
+              setCustomMatchPos(e.target.checked);
+              setCustomH2H((h) => ({ ...h, oppPlayerId: "" }));
+            }}
+          />
+          Match same position only
+        </label>
+        <div className="dk-custom-row">
+          <div className="dk-custom-field">
+            <label>Your player</label>
+            <select
+              value={customH2H.myPlayerId}
+              onChange={(e) => setCustomH2H((h) => ({ ...h, myPlayerId: e.target.value, oppPlayerId: "" }))}
+            >
+              <option value="">Select your player…</option>
+              {myStarterPicks.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.position}) · {formatProj(p.proj)} proj</option>
+              ))}
+            </select>
+            <div className="dk-player-chips">
+              {myStarterPicks.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`dk-player-chip${customH2H.myPlayerId === p.id ? " active" : ""}`}
+                  onClick={() => setCustomH2H((h) => ({ ...h, myPlayerId: p.id, oppPlayerId: "" }))}
+                >
+                  {p.position} {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="dk-custom-field">
+            <label>Opponent&rsquo;s team</label>
+            <select
+              value={customH2H.oppMemberId}
+              onChange={(e) => setCustomH2H((h) => ({ ...h, oppMemberId: e.target.value, oppPlayerId: "" }))}
+            >
+              <option value="">Select fantasy team…</option>
+              {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        </div>
+        {customH2H.oppMemberId && (
+          <div className="dk-custom-field">
+            <label>Their player{customMatchPos && myPlayerMeta?.position ? ` (${myPlayerMeta.position})` : ""}</label>
+            <select
+              value={customH2H.oppPlayerId}
+              onChange={(e) => setCustomH2H((h) => ({ ...h, oppPlayerId: e.target.value }))}
+            >
+              <option value="">Select their player…</option>
+              {oppStarterPicks.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.position}) · {formatProj(p.proj)} proj</option>
+              ))}
+            </select>
+            <div className="dk-player-chips">
+              {oppStarterPicks.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`dk-player-chip${customH2H.oppPlayerId === p.id ? " active" : ""}`}
+                  onClick={() => setCustomH2H((h) => ({ ...h, oppPlayerId: p.id }))}
+                >
+                  {p.position} {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {customH2hOffering ? (
+          <div style={{ marginTop: "0.75rem" }}>
+            {renderMarketRow(customH2hOffering)}
+          </div>
+        ) : (
+          <p className="sb-note" style={{ color: "#7ea08f", margin: "0.5rem 0 0" }}>
+            Pick both players to see odds and place your battle bet.
+          </p>
+        )}
+      </>
+    );
   }
 
   const viewerStatement = useMemo(() => {
@@ -1664,6 +2047,26 @@ export default function LeagueSportsbook({ session }) {
     }
 
     if (bet.type === "matchup") {
+      if (bet.boardKind === "lineup_spread" && bet.subjectId && bet.matchupPeerId) {
+        const fav = members.find((m) => m.id === bet.subjectId);
+        const dog = members.find((m) => m.id === bet.matchupPeerId);
+        if (!fav || !dog) {
+          setBetErrors((e) => ({ ...e, [bet.id]: "Couldn't find both managers in this league." }));
+          return;
+        }
+        const favPts = lineupFantasyPts(weekData, fav.rosterId, fav.starters);
+        const dogPts = lineupFantasyPts(weekData, dog.rosterId, dog.starters);
+        if (favPts == null || dogPts == null) {
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
+          return;
+        }
+        const margin = favPts - dogPts;
+        const over = margin > Number(bet.line);
+        const creatorWins = (bet.creatorSide === "over" && over) || (bet.creatorSide === "under" && !over);
+        await settle({ result: creatorWins ? "creator" : "opponent", actual: margin });
+        return;
+      }
+
       const rA = rosterIdFor(bet.creator);
       const rB = rosterIdFor(bet.opponent);
       if (!rA || !rB) {
@@ -1807,7 +2210,7 @@ export default function LeagueSportsbook({ session }) {
         <div className="sb-ticket-top">
           <div>
             <div className="sb-ticket-num">TICKET NO. {b.ticket}</div>
-            <div className="sb-ticket-type">{TYPE_LABEL[b.type]}{b.week ? ` · Wk ${b.week}` : ""}</div>
+            <div className="sb-ticket-type">{ticketTypeLabel(b)}{b.week ? ` · Wk ${b.week}` : ""}</div>
             <div className="sb-ticket-title">{b.title}</div>
             <div className="sb-ticket-parties">{nameOf(b.creator)} <span style={{ opacity: 0.5 }}>vs</span> {nameOf(b.opponent)}</div>
             {b.odds != null && (
@@ -1960,17 +2363,28 @@ export default function LeagueSportsbook({ session }) {
           <Link2 size={16} /> League
         </button>
         <button className="sb-newbet-btn" onClick={() => {
-          if (!showForm) setForm((f) => ({ ...f, week: activeWeek }));
-          setShowForm((s) => !s);
+          setShowForm(false);
+          setBuilderCategory(null);
+          setBuilderOpen((s) => !s);
         }}>
-          <Plus size={13} /> New Bet
+          <Plus size={13} /> Create Side Bet
         </button>
       </div>
 
       <div className="sb-content">
+        {builderOpen && (
+          <div className="sb-form-panel">
+            {builderCategory === null && renderBuilderCategoryPicker()}
+            {builderCategory === "matchup" && renderMatchupBuilder()}
+            {builderCategory === "total" && renderTotalBuilder()}
+            {builderCategory === "prop" && renderPropBuilder()}
+            {builderCategory === "battle" && renderBattleBuilder()}
+          </div>
+        )}
+
         {showForm && (
           <div className="sb-form-panel">
-            <h3>Write a Slip</h3>
+            <h3>Custom Slip</h3>
             <form onSubmit={submitBet}>
               <div className="sb-form-row">
                 <div className="sb-field">
@@ -2060,7 +2474,6 @@ export default function LeagueSportsbook({ session }) {
                 { id: "props", label: "Player Props" },
                 { id: "lineups", label: "Lineups" },
                 { id: "matchups", label: "H2H" },
-                { id: "battles", label: "Player Battles" },
               ].map((opt) => (
                 <button
                   key={opt.id}
@@ -2092,7 +2505,7 @@ export default function LeagueSportsbook({ session }) {
                   ))}
                 </select>
               </div>
-              {boardNflTeams.length > 0 && boardCategory !== "battles" && (
+              {boardNflTeams.length > 0 && (
                 <div className="sb-board-filter">
                   <label>NFL team</label>
                   <select value={boardNflTeam} onChange={(e) => setBoardNflTeam(e.target.value)}>
@@ -2105,118 +2518,7 @@ export default function LeagueSportsbook({ session }) {
               )}
             </div>
 
-            {boardCategory === "battles" && (
-              <div className="dk-event" style={{ marginBottom: "1rem" }}>
-                <div className="dk-event-header">
-                  <div className="dk-event-title">Build a Player Battle</div>
-                  <div className="dk-event-sub">Your starter vs any starter on another fantasy team — e.g. your WR1 vs their WR1</div>
-                </div>
-                <div className="dk-custom-builder">
-                  <label className="dk-custom-toggle">
-                    <input
-                      type="checkbox"
-                      checked={customMatchPos}
-                      onChange={(e) => {
-                        setCustomMatchPos(e.target.checked);
-                        setCustomH2H((h) => ({ ...h, oppPlayerId: "" }));
-                      }}
-                    />
-                    Match same position only
-                  </label>
-                  <div className="dk-custom-row">
-                    <div className="dk-custom-field">
-                      <label>Your player</label>
-                      <select
-                        value={customH2H.myPlayerId}
-                        onChange={(e) => setCustomH2H((h) => ({
-                          ...h,
-                          myPlayerId: e.target.value,
-                          oppPlayerId: "",
-                        }))}
-                      >
-                        <option value="">Select your starter…</option>
-                        {myStarterPicks.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.position}) · {formatProj(p.proj)} proj
-                          </option>
-                        ))}
-                      </select>
-                      <div className="dk-player-chips">
-                        {myStarterPicks.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className={`dk-player-chip${customH2H.myPlayerId === p.id ? " active" : ""}`}
-                            onClick={() => setCustomH2H((h) => ({
-                              ...h,
-                              myPlayerId: p.id,
-                              oppPlayerId: "",
-                            }))}
-                          >
-                            {p.position} {p.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="dk-custom-field">
-                      <label>Opponent&rsquo;s team</label>
-                      <select
-                        value={customH2H.oppMemberId}
-                        onChange={(e) => setCustomH2H((h) => ({
-                          ...h,
-                          oppMemberId: e.target.value,
-                          oppPlayerId: "",
-                        }))}
-                      >
-                        <option value="">Select fantasy team…</option>
-                        {members.filter((m) => m.id !== viewer).map((m) => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  {customH2H.oppMemberId && (
-                    <div className="dk-custom-field">
-                      <label>Their player{customMatchPos && myPlayerMeta?.position ? ` (${myPlayerMeta.position})` : ""}</label>
-                      <select
-                        value={customH2H.oppPlayerId}
-                        onChange={(e) => setCustomH2H((h) => ({ ...h, oppPlayerId: e.target.value }))}
-                      >
-                        <option value="">Select their starter…</option>
-                        {oppStarterPicks.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.position}) · {formatProj(p.proj)} proj
-                          </option>
-                        ))}
-                      </select>
-                      <div className="dk-player-chips">
-                        {oppStarterPicks.map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className={`dk-player-chip${customH2H.oppPlayerId === p.id ? " active" : ""}`}
-                            onClick={() => setCustomH2H((h) => ({ ...h, oppPlayerId: p.id }))}
-                          >
-                            {p.position} {p.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {customH2hOffering ? (
-                    <div style={{ marginTop: "0.75rem" }}>
-                      {renderMarketRow(customH2hOffering)}
-                    </div>
-                  ) : (
-                    <p className="sb-note" style={{ color: "#7ea08f", margin: "0.5rem 0 0" }}>
-                      Pick both players to see odds and place your battle bet.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {boardCategory !== "battles" && (() => {
+            {(() => {
               const hasLines = boardOfferings.length > 0;
               const hasFiltered = filteredBoardOfferings.length > 0;
               return (
@@ -2331,7 +2633,7 @@ export default function LeagueSportsbook({ session }) {
 
             {weekBets.length === 0 ? (
               <div className="sb-board">
-                <div className="sb-empty">No bet slips for week {activeWeek} yet. Post one with the + New Bet button.</div>
+                <div className="sb-empty">No bet slips for week {activeWeek} yet. Post one with the Create Side Bet button.</div>
               </div>
             ) : (
               weekBets.map(renderBetSlip)

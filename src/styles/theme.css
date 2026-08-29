@@ -91,6 +91,19 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-btn-submit { background: var(--green); color: #eef7ef; }
 .sb-btn-cancel { background: transparent; color: #6b6144; border-color: #c9bb95; }
 
+.sb-builder-categories { display: grid; grid-template-columns: 1fr; gap: 0.6rem; margin: 0.75rem 0; }
+@media (min-width: 640px) { .sb-builder-categories { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sb-builder-category-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; text-align: left; background: #fbf6ea; border: 1px solid #c9bb95; border-radius: 6px; padding: 0.85rem 0.9rem; cursor: pointer; color: var(--ink); }
+.sb-builder-category-btn:hover { border-color: var(--green); background: #f3ecda; }
+.sb-builder-category-btn svg { color: var(--green); }
+.sb-builder-category-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.02em; }
+.sb-builder-category-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #6b6144; }
+.sb-builder-back { display: inline-flex; align-items: center; gap: 0.25rem; background: transparent; border: none; color: #6b6144; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer; padding: 0 0 0.6rem; }
+.sb-builder-back:hover { color: var(--ink); }
+.sb-format-toggle { display: flex; gap: 0.35rem; margin: 0.5rem 0 0.75rem; }
+.sb-format-toggle button { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.45rem 0.75rem; border-radius: 3px; border: 1px solid #c9bb95; background: #fbf6ea; color: #6b6144; cursor: pointer; }
+.sb-format-toggle button.active { background: var(--green); color: #eef7ef; border-color: var(--green); font-weight: 600; }
+
 .sb-sync-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
 .sb-sync-row:last-child { border-bottom: none; }
 .sb-sync-select { background: var(--paper); color: var(--ink); border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.3rem 0.5rem; }
