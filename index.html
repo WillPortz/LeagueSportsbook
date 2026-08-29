@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
   <title>League Sportsbook</title>
-  <!-- build: 2026-08-29T02:34:04.117Z -->
+  <!-- build: 2026-08-29T02:56:28.866Z -->
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     html, body, #root { margin: 0; min-height: 100%; }
@@ -184,7 +184,7 @@ const Swords = p => React.createElement(Icon, p, React.createElement("path", {
   d: "m9.5 6.5 2 2"
 }));
 const STORAGE_KEY = "league-book-v1";
-const BUILD_STAMP = "2026-08-29 02:34";
+const BUILD_STAMP = "2026-08-29 02:56";
 const REGULAR_SEASON_WEEKS = 18;
 function resolveRegularSeasonSchedule(nflState, leagueData) {
   const season = Number(leagueData?.season || nflState?.league_season || nflState?.season || new Date().getFullYear());
@@ -280,24 +280,39 @@ function getWeekPairs(weekData, members) {
   return pairs;
 }
 const PLAYER_CACHE_KEY = "sleeper-players-pick-v1";
-const SLEEPER_PROJ_CACHE_KEY = "sleeper-proj-ppr-v1";
-const POS_LINE = {
-  QB: 18.5,
-  RB: 12.5,
-  WR: 11.5,
-  TE: 8.5,
-  K: 8,
-  DEF: 7.5,
-  FLEX: 10.5
-};
+const SLEEPER_PROJ_CACHE_KEY = "sleeper-proj-v2";
+function getLeagueScoring(leagueData) {
+  const rec = Number(leagueData?.scoring_settings?.rec ?? 1);
+  if (rec >= 1) return {
+    field: "pts_ppr",
+    label: "PPR"
+  };
+  if (rec >= 0.5) return {
+    field: "pts_half_ppr",
+    label: "Half PPR"
+  };
+  return {
+    field: "pts_std",
+    label: "Standard"
+  };
+}
 function formatProj(proj) {
   if (proj == null) return "—";
   return (Math.round(proj * 10) / 10).toFixed(1);
 }
-async function fetchSleeperProjections(week, season, playerIds, seasonType = "regular") {
+function sleeperProj(playerId, projections) {
+  const proj = projections[playerId];
+  if (proj == null || Number.isNaN(Number(proj))) return null;
+  return Number(proj);
+}
+function betLineFromProj(proj) {
+  if (proj == null) return null;
+  return Math.round(proj * 10) / 10;
+}
+async function fetchSleeperProjections(week, season, playerIds, seasonType = "regular", scoringField = "pts_ppr") {
   const ids = [...new Set(playerIds.filter(Boolean))];
   if (!ids.length) return {};
-  const cacheKey = `${season}-${week}-${seasonType}-ppr`;
+  const cacheKey = `${season}-${week}-${seasonType}-${scoringField}`;
   let cache = {};
   try {
     cache = JSON.parse(localStorage.getItem(SLEEPER_PROJ_CACHE_KEY) || "{}");
@@ -309,16 +324,30 @@ async function fetchSleeperProjections(week, season, playerIds, seasonType = "re
   };
   const missing = ids.filter(id => weekCache[id] == null);
   if (missing.length) {
-    const res = await fetch(`https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}`);
-    if (!res.ok) throw new Error("sleeper projections");
-    const rows = await res.json();
+    const positions = ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"];
+    const responses = await Promise.all(positions.map(pos => fetch(`https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}&position[]=${pos}`).catch(() => null)));
     const byPlayer = {};
-    (rows || []).forEach(row => {
-      const pts = row?.stats?.pts_ppr;
-      if (row?.player_id != null && pts != null) {
-        byPlayer[String(row.player_id)] = pts;
-      }
-    });
+    for (const res of responses) {
+      if (!res?.ok) continue;
+      const rows = await res.json();
+      (rows || []).forEach(row => {
+        const pts = row?.stats?.[scoringField];
+        if (row?.player_id != null && pts != null) {
+          byPlayer[String(row.player_id)] = Number(pts);
+        }
+      });
+    }
+    if (!Object.keys(byPlayer).length) {
+      const res = await fetch(`https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}`);
+      if (!res.ok) throw new Error("sleeper projections");
+      const rows = await res.json();
+      (rows || []).forEach(row => {
+        const pts = row?.stats?.[scoringField];
+        if (row?.player_id != null && pts != null) {
+          byPlayer[String(row.player_id)] = Number(pts);
+        }
+      });
+    }
     ids.forEach(id => {
       const pts = byPlayer[String(id)];
       if (pts != null) weekCache[id] = pts;
@@ -331,9 +360,6 @@ async function fetchSleeperProjections(week, season, playerIds, seasonType = "re
     }
   }
   return weekCache;
-}
-function defaultLine(position) {
-  return POS_LINE[position] || 10.5;
 }
 function playerLabel(players, playerId) {
   return players[playerId]?.name || `Player ${playerId}`;
@@ -356,13 +382,165 @@ function getFeaturedStarters(member, players) {
   }
   return featured.slice(0, 4);
 }
-function lineForPlayer(playerId, players, projections) {
-  const proj = projections[playerId];
-  if (proj != null) return Math.round(proj * 2) / 2;
-  return defaultLine(players[playerId]?.position);
+function sumLineupProjections(member, projections, starters = null) {
+  const ids = starters || member.starters || [];
+  let hasProj = false;
+  const total = ids.reduce((sum, pid) => {
+    const proj = sleeperProj(pid, projections);
+    if (proj == null) return sum;
+    hasProj = true;
+    return sum + proj;
+  }, 0);
+  if (!hasProj) return null;
+  return Math.round(total * 10) / 10;
 }
-function sumLineupLine(member, players, projections) {
-  return Math.round((member.starters || []).reduce((sum, pid) => sum + lineForPlayer(pid, players, projections), 0) * 2) / 2;
+function generateBoardOfferings(members, week, weekData, players, projections, scoringLabel = "Sleeper") {
+  if (!members.length || !Object.keys(players).length) return [];
+  const offerings = [];
+  const pairs = Object.keys(weekData).length > 0 ? getWeekPairs(weekData, members) : [];
+  members.forEach(m => {
+    getFeaturedStarters(m, players).forEach(pid => {
+      const p = players[pid];
+      if (!p) return;
+      const rawProj = sleeperProj(pid, projections);
+      const line = betLineFromProj(rawProj);
+      if (line == null) return;
+      offerings.push({
+        id: `pou-${week}-${pid}`,
+        kind: "player_ou",
+        category: "props",
+        type: "prop",
+        week,
+        title: `${p.name} O/U ${formatProj(line)} fantasy pts`,
+        subtitle: `${m.name} · ${p.position}${p.team ? ` · ${p.team}` : ""} · Sleeper ${scoringLabel} proj ${formatProj(rawProj)}`,
+        playerId: pid,
+        ownerId: m.id,
+        fantasyTeamId: m.id,
+        position: p.position,
+        nflTeam: p.team || null,
+        line,
+        sides: [{
+          key: "over",
+          label: `Over ${formatProj(line)}`,
+          odds: -110,
+          pick: "over"
+        }, {
+          key: "under",
+          label: `Under ${formatProj(line)}`,
+          odds: -110,
+          pick: "under"
+        }]
+      });
+    });
+  });
+  members.forEach(m => {
+    const line = sumLineupProjections(m, projections);
+    if (line == null) return;
+    offerings.push({
+      id: `lineup-${week}-${m.id}`,
+      kind: "lineup_ou",
+      category: "lineups",
+      type: "prop",
+      week,
+      title: `${m.name} lineup O/U ${formatProj(line)} fantasy pts`,
+      subtitle: `Week ${week} · Sleeper ${scoringLabel} starter projections`,
+      subjectId: m.id,
+      fantasyTeamId: m.id,
+      line,
+      sides: [{
+        key: "over",
+        label: `Over ${formatProj(line)}`,
+        odds: -115,
+        pick: "over"
+      }, {
+        key: "under",
+        label: `Under ${formatProj(line)}`,
+        odds: -105,
+        pick: "under"
+      }]
+    });
+  });
+  pairs.forEach(([a, b]) => {
+    const projA = sumLineupProjections(a, projections);
+    const projB = sumLineupProjections(b, projections);
+    if (projA == null || projB == null) return;
+    const spread = projA - projB;
+    const probA = winProbFromSpread(spread);
+    offerings.push({
+      id: `lineup-ml-${week}-${a.id}-${b.id}`,
+      kind: "lineup_ml",
+      category: "matchups",
+      type: "matchup",
+      week,
+      title: `${a.name} vs ${b.name} — lineup pts`,
+      subtitle: `Week ${week} · Sleeper ${scoringLabel} proj ${formatProj(projA)} vs ${formatProj(projB)}`,
+      memberA: a.id,
+      memberB: b.id,
+      fantasyTeamIds: [a.id, b.id],
+      sides: [{
+        key: "a",
+        memberId: a.id,
+        label: a.name,
+        odds: americanOdds(probA)
+      }, {
+        key: "b",
+        memberId: b.id,
+        label: b.name,
+        odds: americanOdds(1 - probA)
+      }]
+    });
+    const matchups = [{
+      pos: "QB",
+      label: "QB"
+    }, {
+      pos: "RB",
+      label: "RB"
+    }, {
+      pos: "WR",
+      label: "WR"
+    }];
+    matchups.forEach(({
+      pos,
+      label
+    }) => {
+      const pidA = findStarterByPos(a, players, pos);
+      const pidB = findStarterByPos(b, players, pos);
+      if (!pidA || !pidB) return;
+      const lineA = sleeperProj(pidA, projections);
+      const lineB = sleeperProj(pidB, projections);
+      if (lineA == null || lineB == null) return;
+      const prob = winProbFromSpread(lineA - lineB);
+      offerings.push({
+        id: `ph2h-${week}-${pidA}-${pidB}`,
+        kind: "player_h2h",
+        category: "matchups",
+        type: "prop",
+        week,
+        title: `${playerLabel(players, pidA)} vs ${playerLabel(players, pidB)}`,
+        subtitle: `Week ${week} · ${label} H2H · Sleeper ${formatProj(lineA)} vs ${formatProj(lineB)}`,
+        playerIdA: pidA,
+        playerIdB: pidB,
+        memberA: a.id,
+        memberB: b.id,
+        fantasyTeamIds: [a.id, b.id],
+        position: pos,
+        sides: [{
+          key: "a",
+          playerId: pidA,
+          memberId: a.id,
+          label: playerLabel(players, pidA),
+          odds: americanOdds(prob)
+        }, {
+          key: "b",
+          playerId: pidB,
+          memberId: b.id,
+          label: playerLabel(players, pidB),
+          odds: americanOdds(1 - prob)
+        }]
+      });
+    });
+  });
+  return offerings;
 }
 function lineupFantasyPts(weekData, rosterId, starters) {
   const row = weekData[rosterId];
@@ -409,192 +587,50 @@ async function fetchPlayerInfo(playerIds) {
   }
   return cached;
 }
-function generateBoardOfferings(members, week, weekData, players, projections) {
-  if (!members.length || !Object.keys(players).length) return [];
-  const offerings = [];
-  const pairs = Object.keys(weekData).length > 0 ? getWeekPairs(weekData, members) : [];
-  members.forEach(m => {
-    getFeaturedStarters(m, players).forEach(pid => {
-      const p = players[pid];
-      if (!p) return;
-      const line = lineForPlayer(pid, players, projections);
-      const rawProj = projections[pid];
-      offerings.push({
-        id: `pou-${week}-${pid}`,
-        kind: "player_ou",
-        category: "props",
-        type: "prop",
-        week,
-        title: `${p.name} O/U ${line} fantasy pts`,
-        subtitle: `${m.name} · ${p.position}${p.team ? ` · ${p.team}` : ""} · Sleeper PPR proj ${formatProj(rawProj)}`,
-        playerId: pid,
-        ownerId: m.id,
-        fantasyTeamId: m.id,
-        position: p.position,
-        nflTeam: p.team || null,
-        line,
-        sides: [{
-          key: "over",
-          label: `Over ${line}`,
-          odds: -110,
-          pick: "over"
-        }, {
-          key: "under",
-          label: `Under ${line}`,
-          odds: -110,
-          pick: "under"
-        }]
-      });
-    });
-  });
-  members.forEach(m => {
-    if (!m.starters?.length) return;
-    const line = sumLineupLine(m, players, projections);
-    offerings.push({
-      id: `lineup-${week}-${m.id}`,
-      kind: "lineup_ou",
-      category: "lineups",
-      type: "prop",
-      week,
-      title: `${m.name} lineup O/U ${line} fantasy pts`,
-      subtitle: `Week ${week} · Sleeper PPR starter projections`,
-      subjectId: m.id,
-      fantasyTeamId: m.id,
-      line,
-      sides: [{
-        key: "over",
-        label: `Over ${line}`,
-        odds: -115,
-        pick: "over"
-      }, {
-        key: "under",
-        label: `Under ${line}`,
-        odds: -105,
-        pick: "under"
-      }]
-    });
-  });
-  pairs.forEach(([a, b]) => {
-    const projA = sumLineupLine(a, players, projections);
-    const projB = sumLineupLine(b, players, projections);
-    const spread = Math.round((projA - projB) * 2) / 2;
-    const probA = winProbFromSpread(spread);
-    offerings.push({
-      id: `lineup-ml-${week}-${a.id}-${b.id}`,
-      kind: "lineup_ml",
-      category: "matchups",
-      type: "matchup",
-      week,
-      title: `${a.name} vs ${b.name} — lineup pts`,
-      subtitle: `Week ${week} · Sleeper PPR proj ${projA} vs ${projB}`,
-      memberA: a.id,
-      memberB: b.id,
-      fantasyTeamIds: [a.id, b.id],
-      sides: [{
-        key: "a",
-        memberId: a.id,
-        label: a.name,
-        odds: americanOdds(probA)
-      }, {
-        key: "b",
-        memberId: b.id,
-        label: b.name,
-        odds: americanOdds(1 - probA)
-      }]
-    });
-    const matchups = [{
-      pos: "QB",
-      label: "QB"
-    }, {
-      pos: "RB",
-      label: "RB"
-    }, {
-      pos: "WR",
-      label: "WR"
-    }];
-    matchups.forEach(({
-      pos,
-      label
-    }) => {
-      const pidA = findStarterByPos(a, players, pos);
-      const pidB = findStarterByPos(b, players, pos);
-      if (!pidA || !pidB) return;
-      const lineA = lineForPlayer(pidA, players, projections);
-      const lineB = lineForPlayer(pidB, players, projections);
-      const prob = winProbFromSpread(lineA - lineB);
-      offerings.push({
-        id: `ph2h-${week}-${pidA}-${pidB}`,
-        kind: "player_h2h",
-        category: "matchups",
-        type: "prop",
-        week,
-        title: `${playerLabel(players, pidA)} vs ${playerLabel(players, pidB)}`,
-        subtitle: `Week ${week} · ${label} H2H · Sleeper PPR ${lineA} vs ${lineB}`,
-        playerIdA: pidA,
-        playerIdB: pidB,
-        memberA: a.id,
-        memberB: b.id,
-        fantasyTeamIds: [a.id, b.id],
-        position: pos,
-        sides: [{
-          key: "a",
-          playerId: pidA,
-          memberId: a.id,
-          label: playerLabel(players, pidA),
-          odds: americanOdds(prob)
-        }, {
-          key: "b",
-          playerId: pidB,
-          memberId: b.id,
-          label: playerLabel(players, pidB),
-          odds: americanOdds(1 - prob)
-        }]
-      });
-    });
-  });
-  return offerings;
-}
 function getMatchupOpponent(viewerId, members, weekData) {
   const pairs = getWeekPairs(weekData, members);
   const pair = pairs.find(([a, b]) => a.id === viewerId || b.id === viewerId);
   if (!pair) return null;
   return pair[0].id === viewerId ? pair[1] : pair[0];
 }
-function buildMatchupOfferings(me, opp, week, players, projections) {
+function buildMatchupOfferings(me, opp, week, players, projections, scoringLabel = "Sleeper") {
   if (!me || !opp) return [];
   const offerings = [];
-  const projMe = sumLineupLine(me, players, projections);
-  const projOpp = sumLineupLine(opp, players, projections);
-  const spread = Math.round((projMe - projOpp) * 2) / 2;
-  const probMe = winProbFromSpread(spread);
-  offerings.push({
-    id: `lineup-ml-${week}-${me.id}-${opp.id}`,
-    kind: "lineup_ml",
-    type: "matchup",
-    week,
-    title: `${me.name} vs ${opp.name} — lineup pts`,
-    subtitle: `Week ${week} · Sleeper PPR proj ${projMe} vs ${projOpp}`,
-    memberA: me.id,
-    memberB: opp.id,
-    counterpartyId: opp.id,
-    sides: [{
-      key: "a",
-      memberId: me.id,
-      label: `${me.name} (${projMe})`,
-      odds: americanOdds(probMe)
-    }, {
-      key: "b",
-      memberId: opp.id,
-      label: `${opp.name} (${projOpp})`,
-      odds: americanOdds(1 - probMe)
-    }]
-  });
+  const projMe = sumLineupProjections(me, projections);
+  const projOpp = sumLineupProjections(opp, projections);
+  if (projMe != null && projOpp != null) {
+    const spread = projMe - projOpp;
+    const probMe = winProbFromSpread(spread);
+    offerings.push({
+      id: `lineup-ml-${week}-${me.id}-${opp.id}`,
+      kind: "lineup_ml",
+      type: "matchup",
+      week,
+      title: `${me.name} vs ${opp.name} — lineup pts`,
+      subtitle: `Week ${week} · Sleeper ${scoringLabel} proj ${formatProj(projMe)} vs ${formatProj(projOpp)}`,
+      memberA: me.id,
+      memberB: opp.id,
+      counterpartyId: opp.id,
+      sides: [{
+        key: "a",
+        memberId: me.id,
+        label: `${me.name} (${formatProj(projMe)})`,
+        odds: americanOdds(probMe)
+      }, {
+        key: "b",
+        memberId: opp.id,
+        label: `${opp.name} (${formatProj(projOpp)})`,
+        odds: americanOdds(1 - probMe)
+      }]
+    });
+  }
   ["QB", "RB", "WR", "TE"].forEach(pos => {
     const pidMe = findStarterByPos(me, players, pos);
     const pidOpp = findStarterByPos(opp, players, pos);
     if (!pidMe || !pidOpp) return;
-    const lineMe = lineForPlayer(pidMe, players, projections);
-    const lineOpp = lineForPlayer(pidOpp, players, projections);
+    const lineMe = sleeperProj(pidMe, projections);
+    const lineOpp = sleeperProj(pidOpp, projections);
+    if (lineMe == null || lineOpp == null) return;
     const prob = winProbFromSpread(lineMe - lineOpp);
     offerings.push({
       id: `ph2h-${week}-${pidMe}-${pidOpp}`,
@@ -602,7 +638,7 @@ function buildMatchupOfferings(me, opp, week, players, projections) {
       type: "prop",
       week,
       title: `${playerLabel(players, pidMe)} vs ${playerLabel(players, pidOpp)}`,
-      subtitle: `Week ${week} · ${pos} H2H · Upcoming PPR ${lineMe} vs ${lineOpp}`,
+      subtitle: `Week ${week} · ${pos} H2H · Sleeper ${formatProj(lineMe)} vs ${formatProj(lineOpp)}`,
       playerIdA: pidMe,
       playerIdB: pidOpp,
       memberA: me.id,
@@ -628,28 +664,29 @@ function buildMatchupOfferings(me, opp, week, players, projections) {
     getFeaturedStarters(member, players).forEach(pid => {
       const p = players[pid];
       if (!p) return;
-      const line = lineForPlayer(pid, players, projections);
-      const rawProj = projections[pid];
+      const rawProj = sleeperProj(pid, projections);
+      const line = betLineFromProj(rawProj);
+      if (line == null) return;
       const counterparty = member.id === me.id ? opp.id : me.id;
       offerings.push({
         id: `pou-${week}-${pid}`,
         kind: "player_ou",
         type: "prop",
         week,
-        title: `${p.name} O/U ${line} fantasy pts`,
-        subtitle: `${member.name} · Sleeper PPR proj ${formatProj(rawProj)}`,
+        title: `${p.name} O/U ${formatProj(line)} fantasy pts`,
+        subtitle: `${member.name} · Sleeper ${scoringLabel} proj ${formatProj(rawProj)}`,
         playerId: pid,
         ownerId: member.id,
         counterpartyId: counterparty,
         line,
         sides: [{
           key: "over",
-          label: `Over ${line}`,
+          label: `Over ${formatProj(line)}`,
           odds: -110,
           pick: "over"
         }, {
           key: "under",
-          label: `Under ${line}`,
+          label: `Under ${formatProj(line)}`,
           odds: -110,
           pick: "under"
         }]
@@ -672,7 +709,7 @@ function starterRows(member, players, projections, weekData) {
       name: p.name,
       position: p.position,
       team: p.team,
-      proj: projections[pid] ?? null,
+      proj: sleeperProj(pid, projections),
       actual: actual != null ? actual : null
     };
   });
@@ -683,8 +720,9 @@ function buildCustomH2hOffering(viewerId, myPlayerId, oppMemberId, oppPlayerId, 
   const myP = players[myPlayerId];
   const oppP = players[oppPlayerId];
   if (!myP || !oppP) return null;
-  const lineA = lineForPlayer(myPlayerId, players, projections);
-  const lineB = lineForPlayer(oppPlayerId, players, projections);
+  const lineA = sleeperProj(myPlayerId, projections);
+  const lineB = sleeperProj(oppPlayerId, projections);
+  if (lineA == null || lineB == null) return null;
   const prob = winProbFromSpread(lineA - lineB);
   return {
     id: `custom-h2h-${week}-${myPlayerId}-${oppPlayerId}`,
@@ -704,14 +742,14 @@ function buildCustomH2hOffering(viewerId, myPlayerId, oppMemberId, oppPlayerId, 
       playerId: myPlayerId,
       memberId: viewerId,
       label: myP.name,
-      sublabel: `${myP.position} · ${formatProj(projections[myPlayerId])} proj`,
+      sublabel: `${myP.position} · ${formatProj(lineA)} Sleeper proj`,
       odds: americanOdds(prob)
     }, {
       key: "b",
       playerId: oppPlayerId,
       memberId: oppMemberId,
       label: oppP.name,
-      sublabel: `${oppP.position} · ${formatProj(projections[oppPlayerId])} proj`,
+      sublabel: `${oppP.position} · ${formatProj(lineB)} Sleeper proj`,
       odds: americanOdds(1 - prob)
     }]
   };
@@ -728,7 +766,7 @@ function starterPickOptions(member, players, projections, positionFilter = "all"
       name: p.name,
       position: p.position,
       team: p.team,
-      proj: projections[pid] ?? null
+      proj: sleeperProj(pid, projections)
     };
   });
 }
@@ -745,7 +783,7 @@ function groupBoardEvents(offerings, members) {
     events.push({
       id: `team-${tid}`,
       title: team?.name || "Team",
-      subtitle: "Player fantasy points · PPR",
+      subtitle: "Player fantasy points · Sleeper",
       markets
     });
   });
@@ -877,6 +915,8 @@ function LeagueSportsbook() {
     week: stored?.week || 1,
     season: stored?.season || new Date().getFullYear(),
     nflSeasonType: stored?.nflSeasonType || "regular",
+    scoringField: stored?.scoringField || "pts_ppr",
+    scoringLabel: stored?.scoringLabel || "PPR",
     inputId: stored?.leagueId || ""
   });
   const [members, setMembers] = useState(stored?.members || []);
@@ -935,9 +975,11 @@ function LeagueSportsbook() {
       selectedWeek,
       week: league.week,
       season: league.season,
-      nflSeasonType: league.nflSeasonType
+      nflSeasonType: league.nflSeasonType,
+      scoringField: league.scoringField,
+      scoringLabel: league.scoringLabel
     });
-  }, [league.linked, league.leagueId, league.leagueName, league.week, league.season, league.nflSeasonType, members, viewer, bets, ticketSeq, selectedWeek]);
+  }, [league.linked, league.leagueId, league.leagueName, league.week, league.season, league.nflSeasonType, league.scoringField, league.scoringLabel, members, viewer, bets, ticketSeq, selectedWeek]);
   useEffect(() => {
     if (defaultOpponent && !members.some(m => m.id === form.opponent && m.id !== viewer)) {
       setForm(f => ({
@@ -958,12 +1000,15 @@ function LeagueSportsbook() {
     const builtMembers = buildMembers(rosters, users);
     if (builtMembers.length === 0) throw new Error("empty");
     const schedule = resolveRegularSeasonSchedule(nflState, leagueData);
+    const scoring = getLeagueScoring(leagueData);
     return {
       leagueName: leagueData.name || "Your League",
       members: builtMembers,
       week: schedule.currentWeek,
       season: schedule.season,
-      nflSeasonType: schedule.nflSeasonType
+      nflSeasonType: schedule.nflSeasonType,
+      scoringField: scoring.field,
+      scoringLabel: scoring.label
     };
   }, []);
   const connectLeague = useCallback(async leagueId => {
@@ -984,6 +1029,8 @@ function LeagueSportsbook() {
         week: data.week,
         season: data.season,
         nflSeasonType: data.nflSeasonType,
+        scoringField: data.scoringField,
+        scoringLabel: data.scoringLabel,
         loading: false,
         error: null,
         inputId: leagueId.trim()
@@ -1027,6 +1074,8 @@ function LeagueSportsbook() {
         week: data.week,
         season: data.season,
         nflSeasonType: data.nflSeasonType,
+        scoringField: data.scoringField,
+        scoringLabel: data.scoringLabel,
         loading: false,
         error: null
       }));
@@ -1051,6 +1100,8 @@ function LeagueSportsbook() {
       week: 1,
       season: new Date().getFullYear(),
       nflSeasonType: "regular",
+      scoringField: "pts_ppr",
+      scoringLabel: "PPR",
       inputId: ""
     });
     setMembers([]);
@@ -1117,14 +1168,16 @@ function LeagueSportsbook() {
       const nflState = stateRes.ok ? await stateRes.json() : null;
       const leagueData = leagueRes.ok ? await leagueRes.json() : null;
       const schedule = resolveRegularSeasonSchedule(nflState, leagueData);
-      const season = schedule.season;
+      const scoring = getLeagueScoring(leagueData);
+      const season = Number(leagueData?.season) || schedule.season;
       const map = {};
       current.forEach(row => {
         map[row.roster_id] = row;
       });
-      const starterIds = members.flatMap(m => m.starters || []);
+      const matchupStarterIds = [...new Set(current.flatMap(row => (row.starters || []).filter(id => id && id !== "0")))];
+      const starterIds = matchupStarterIds.length ? matchupStarterIds : members.flatMap(m => m.starters || []);
       const playerInfo = await fetchPlayerInfo(starterIds);
-      const projections = await fetchSleeperProjections(wk, season, starterIds, "regular");
+      const projections = await fetchSleeperProjections(wk, season, starterIds, "regular", scoring.field);
       const entry = {
         matchups: map,
         projections
@@ -1144,6 +1197,8 @@ function LeagueSportsbook() {
         season,
         week: schedule.currentWeek,
         nflSeasonType: schedule.nflSeasonType,
+        scoringField: scoring.field,
+        scoringLabel: scoring.label,
         error: null
       }));
       if (showSpinner) {
@@ -1228,6 +1283,10 @@ function LeagueSportsbook() {
   const matchupProjections = weekCache[matchupWeek]?.projections ?? {};
   const loadedWeekCount = useMemo(() => Object.keys(weekCache).filter(w => Number(w) <= currentWeek).length, [weekCache, currentWeek]);
   useEffect(() => {
+    weekCacheRef.current = {};
+    setWeekCache({});
+  }, [league.scoringField, league.season]);
+  useEffect(() => {
     if (!leagueReady || !league.leagueId) return;
     prefetchSeasonWeeks(currentWeek);
   }, [leagueReady, league.leagueId, currentWeek, prefetchSeasonWeeks]);
@@ -1241,7 +1300,7 @@ function LeagueSportsbook() {
   const weekBets = useMemo(() => bets.filter(b => Number(b.week) === activeWeek), [bets, activeWeek]);
   const seasonBets = useMemo(() => bets.filter(b => b.week == null || b.week === ""), [bets]);
   const weeklyLedger = useMemo(() => computeLedger(bets, members, activeWeek), [bets, members, activeWeek]);
-  const boardOfferings = useMemo(() => generateBoardOfferings(members, activeWeek, activeWeekData, players, activeProjections), [members, activeWeek, activeWeekData, players, activeProjections]);
+  const boardOfferings = useMemo(() => generateBoardOfferings(members, activeWeek, activeWeekData, players, activeProjections, league.scoringLabel), [members, activeWeek, activeWeekData, players, activeProjections, league.scoringLabel]);
   const boardNflTeams = useMemo(() => {
     const teams = new Set();
     Object.values(players).forEach(p => {
@@ -1264,12 +1323,12 @@ function LeagueSportsbook() {
   }, [matchupDataReady, viewer, members, matchupWeekData]);
   const matchupOfferings = useMemo(() => {
     if (!viewerMember || !matchupOpponent || !matchupDataReady) return [];
-    return buildMatchupOfferings(viewerMember, matchupOpponent, matchupWeek, players, matchupProjections);
-  }, [viewerMember, matchupOpponent, matchupWeek, players, matchupProjections, matchupDataReady]);
+    return buildMatchupOfferings(viewerMember, matchupOpponent, matchupWeek, players, matchupProjections, league.scoringLabel);
+  }, [viewerMember, matchupOpponent, matchupWeek, players, matchupProjections, matchupDataReady, league.scoringLabel]);
   const myStarterRows = useMemo(() => viewerMember && matchupDataReady ? starterRows(viewerMember, players, matchupProjections, matchupWeekData) : [], [viewerMember, players, matchupProjections, matchupWeekData, matchupDataReady]);
   const oppStarterRows = useMemo(() => matchupOpponent && matchupDataReady ? starterRows(matchupOpponent, players, matchupProjections, matchupWeekData) : [], [matchupOpponent, players, matchupProjections, matchupWeekData, matchupDataReady]);
-  const myLineupProj = viewerMember ? sumLineupLine(viewerMember, players, matchupProjections) : 0;
-  const oppLineupProj = matchupOpponent ? sumLineupLine(matchupOpponent, players, matchupProjections) : 0;
+  const myLineupProj = viewerMember ? sumLineupProjections(viewerMember, matchupProjections) ?? 0 : 0;
+  const oppLineupProj = matchupOpponent ? sumLineupProjections(matchupOpponent, matchupProjections) ?? 0 : 0;
   const myStarterPicks = useMemo(() => starterPickOptions(viewerMember, players, activeProjections), [viewerMember, players, activeProjections]);
   const customOppMember = useMemo(() => members.find(m => m.id === customH2H.oppMemberId) || null, [members, customH2H.oppMemberId]);
   const myPlayerMeta = players[customH2H.myPlayerId];
@@ -1414,7 +1473,7 @@ function LeagueSportsbook() {
       className: `sb-matchup-team${isYou ? " you" : ""}`
     }, /*#__PURE__*/React.createElement("h4", null, member.name, isYou ? " (You)" : ""), /*#__PURE__*/React.createElement("div", {
       className: "sb-matchup-total"
-    }, "Upcoming Sleeper PPR proj: ", /*#__PURE__*/React.createElement("strong", null, totalProj), matchupWeekData[member.rosterId]?.points != null && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 Actual: ", /*#__PURE__*/React.createElement("strong", null, matchupWeekData[member.rosterId].points))), rows.map(row => /*#__PURE__*/React.createElement("button", {
+    }, "Upcoming Sleeper ", league.scoringLabel, " proj: ", /*#__PURE__*/React.createElement("strong", null, formatProj(totalProj)), matchupWeekData[member.rosterId]?.points != null && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 Actual: ", /*#__PURE__*/React.createElement("strong", null, matchupWeekData[member.rosterId].points))), rows.map(row => /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: `sb-matchup-player${selectedId === row.pid ? " selected" : ""}`,
       key: row.pid,
@@ -1428,7 +1487,7 @@ function LeagueSportsbook() {
       className: "sb-matchup-meta"
     }, row.team)), /*#__PURE__*/React.createElement("span", {
       className: "sb-matchup-proj",
-      title: "Sleeper PPR projection"
+      title: `Sleeper ${league.scoringLabel} projection`
     }, formatProj(row.proj)), /*#__PURE__*/React.createElement("span", {
       className: "sb-matchup-actual",
       title: "Actual points"
@@ -2381,7 +2440,7 @@ function LeagueSportsbook() {
       marginBottom: "0.85rem",
       color: "#7ea08f"
     }
-  }, "Tap a line to add it to your bet slip. Lines use Sleeper PPR projections."), /*#__PURE__*/React.createElement("div", {
+  }, "Tap a line to add it to your bet slip. Lines use Sleeper\u2019s ", league.scoringLabel, " projections."), /*#__PURE__*/React.createElement("div", {
     className: "dk-sport-chips"
   }, [{
     id: "all",
@@ -2577,7 +2636,7 @@ function LeagueSportsbook() {
     className: "sb-board"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sb-empty"
-  }, "Loading your matchup and Sleeper PPR projections\u2026")) : !matchupOpponent ? /*#__PURE__*/React.createElement("div", {
+  }, "Loading your matchup and Sleeper ", league.scoringLabel, " projections\u2026")) : !matchupOpponent ? /*#__PURE__*/React.createElement("div", {
     className: "sb-board"
   }, /*#__PURE__*/React.createElement("div", {
     className: "sb-empty"
