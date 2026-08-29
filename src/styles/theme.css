@@ -1,0 +1,223 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, #root { margin: 0; min-height: 100%; }
+*, *::before, *::after { box-sizing: border-box; }
+
+.sb-root {
+  --felt: #163229; --felt-dark: #102520;
+  --paper: #f2e8d2; --ink: #23281f;
+  --gold: #c9a227; --gold-bright: #e0bc4a;
+  --red: #a6373c; --green: #3f6b52; --line: #3f6657;
+  font-family: 'Inter', sans-serif;
+  background: var(--felt);
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,0.03), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(255,255,255,0.03), transparent 40%);
+  color: var(--paper);
+  min-height: 100%;
+  padding-bottom: 5.5rem;
+}
+.sb-display { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.03em; }
+.sb-mono { font-family: 'IBM Plex Mono', monospace; }
+
+.flex { display: flex; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.flex-wrap { flex-wrap: wrap; }
+.gap-2 { gap: 0.5rem; }
+.gap-3 { gap: 0.75rem; }
+
+.sb-marquee { border-bottom: 2px solid var(--line); background: linear-gradient(180deg, var(--felt-dark), var(--felt)); padding: 1.1rem 1.25rem 1rem; }
+.sb-marquee-title { font-size: 2rem; line-height: 1; color: var(--gold-bright); text-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+.sb-marquee-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; letter-spacing: 0.12em; color: #a9c4b6; text-transform: uppercase; }
+
+.sb-viewer-select { background: var(--felt-dark); border: 1px solid var(--line); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 3px; }
+
+.sb-tabs { display: flex; gap: 0.3rem; padding: 0.9rem 1.25rem 0; flex-wrap: wrap; }
+.sb-tab { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.04em; padding: 0.5rem 1.1rem 0.6rem; color: #a9c4b6; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; }
+.sb-tab.active { color: var(--gold-bright); border-bottom-color: var(--gold); }
+
+.sb-newbet-btn { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; background: var(--gold); color: #241d05; border: none; padding: 0.5rem 0.8rem; border-radius: 3px; display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-weight: 600; }
+.sb-newbet-btn:hover { background: var(--gold-bright); }
+
+.sb-content { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
+
+.sb-ticket { position: relative; background: var(--paper); color: var(--ink); border-radius: 4px; padding: 1.1rem 1.2rem 1rem; margin-bottom: 1.4rem; box-shadow: 0 6px 14px rgba(0,0,0,0.28); }
+.sb-ticket::before, .sb-ticket::after { content: ""; position: absolute; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; background: var(--felt); border-radius: 50%; }
+.sb-ticket::before { left: -10px; } .sb-ticket::after { right: -10px; }
+.sb-ticket-perf { border-top: 2px dashed #cdbf9c; margin: 0.7rem 0; }
+.sb-ticket-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.sb-ticket-num { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; letter-spacing: 0.08em; }
+.sb-ticket-type { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; background: var(--felt); color: var(--gold-bright); padding: 0.15rem 0.5rem; border-radius: 2px; margin-bottom: 0.35rem; }
+.sb-ticket-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; line-height: 1.15; letter-spacing: 0.01em; }
+.sb-ticket-parties { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #5a5340; margin-top: 0.3rem; }
+.sb-ticket-stake { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--green); text-align: right; white-space: nowrap; }
+.sb-ticket-stake span { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #8a7c55; letter-spacing: 0.1em; }
+
+.sb-stamp { position: absolute; top: 0.9rem; right: 1.1rem; font-family: 'Bebas Neue', sans-serif; font-size: 0.85rem; letter-spacing: 0.12em; padding: 0.15rem 0.5rem; border: 2px solid currentColor; border-radius: 3px; opacity: 0.85; pointer-events: none; }
+
+.sb-ticket-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.6rem; }
+.sb-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.4rem 0.65rem; border-radius: 3px; border: 1px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+.sb-btn-accept { background: var(--green); color: #eef7ef; }
+.sb-btn-decline { background: transparent; color: var(--red); border-color: var(--red); }
+.sb-btn-lock { background: var(--ink); color: var(--paper); }
+.sb-btn-grade { background: transparent; color: var(--ink); border-color: #8a7c55; }
+.sb-btn-auto { background: var(--gold); color: #241d05; }
+.sb-btn:hover { filter: brightness(1.08); }
+.sb-btn:disabled { opacity: 0.5; cursor: default; }
+
+.sb-result-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #5a5340; margin-top: 0.5rem; }
+.sb-result-line b { color: var(--green); }
+.sb-bet-error { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--red); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
+
+.sb-board { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 1.1rem 1.2rem; margin-bottom: 1.5rem; }
+.sb-board h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.75rem; }
+.sb-board p.sb-note { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; margin: -0.4rem 0 0.9rem; line-height: 1.5; }
+.sb-standing-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
+.sb-standing-row:last-child { border-bottom: none; }
+.sb-standing-name { font-family: 'Inter', sans-serif; font-weight: 600; }
+.sb-owe-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
+.sb-owe-row:last-child { border-bottom: none; }
+.sb-empty { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: #7ea08f; padding: 0.5rem 0; }
+
+.sb-form-panel { background: var(--paper); color: var(--ink); border-radius: 6px; padding: 1.1rem 1.2rem; margin-bottom: 1.5rem; }
+.sb-form-panel h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; margin: 0 0 0.75rem; }
+.sb-field { margin-bottom: 0.75rem; }
+.sb-field label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6144; margin-bottom: 0.25rem; }
+.sb-field input, .sb-field select { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid #c9bb95; border-radius: 3px; font-family: 'Inter', sans-serif; font-size: 0.85rem; background: #fbf6ea; color: var(--ink); }
+.sb-form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.sb-form-row > .sb-field { flex: 1; min-width: 120px; }
+.sb-form-actions { display: flex; gap: 0.6rem; margin-top: 0.4rem; }
+.sb-btn-submit { background: var(--green); color: #eef7ef; }
+.sb-btn-cancel { background: transparent; color: #6b6144; border-color: #c9bb95; }
+
+.sb-sync-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
+.sb-sync-row:last-child { border-bottom: none; }
+.sb-sync-select { background: var(--paper); color: var(--ink); border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.3rem 0.5rem; }
+.sb-error-banner { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #e0949a; margin-top: 0.5rem; display: flex; gap: 0.4rem; align-items: center; }
+.sb-week-points { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; }
+
+.sb-ledger-toggle { display: flex; gap: 0.35rem; margin-bottom: 1rem; }
+.sb-ledger-toggle button { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.45rem 0.75rem; border-radius: 3px; border: 1px solid var(--line); background: transparent; color: #a9c4b6; cursor: pointer; }
+.sb-ledger-toggle button.active { background: var(--gold); color: #241d05; border-color: var(--gold); font-weight: 600; }
+
+.sb-week-nav { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1rem; }
+.sb-week-nav button { background: var(--felt); border: 1px solid var(--line); color: var(--paper); border-radius: 3px; padding: 0.35rem 0.45rem; cursor: pointer; display: flex; align-items: center; }
+.sb-week-nav button:disabled { opacity: 0.35; cursor: default; }
+.sb-week-nav-label { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.04em; color: var(--gold-bright); min-width: 8rem; text-align: center; }
+.sb-week-select { padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 0.82rem; min-width: 6.5rem; }
+
+.sb-statement-header { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #7ea08f; margin-bottom: 0.75rem; }
+.sb-statement-personal { background: rgba(201, 162, 39, 0.08); border: 1px solid rgba(201, 162, 39, 0.35); border-radius: 4px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+.sb-statement-personal h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; color: var(--gold-bright); margin: 0 0 0.5rem; letter-spacing: 0.04em; }
+.sb-statement-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; padding: 0.25rem 0; color: #c8ddd2; }
+.sb-activity-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; }
+.sb-activity-row:last-child { border-bottom: none; }
+.sb-activity-title { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 0.82rem; color: var(--paper); margin-bottom: 0.15rem; }
+.sb-activity-meta { color: #7ea08f; font-size: 0.68rem; }
+.sb-slips-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; }
+.sb-slips-summary { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; letter-spacing: 0.04em; }
+.sb-season-section { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+.sb-season-section h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.35rem; }
+.sb-season-section .sb-note { margin-bottom: 1rem; }
+
+.sb-setup { max-width: 520px; margin: 3rem auto; padding: 0 1.25rem; }
+.sb-setup-card { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem 1.4rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+.sb-setup-card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.04em; }
+.sb-setup-card p { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #7ea08f; line-height: 1.6; margin: 0 0 1.1rem; }
+.sb-setup-members { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.75rem 0 1rem; max-height: 220px; overflow-y: auto; }
+.sb-setup-member { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-radius: 4px; border: 1px solid var(--line); font-family: 'Inter', sans-serif; font-size: 0.85rem; }
+.sb-setup-member span.sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; }
+.sb-setup-member.claimable { cursor: pointer; background: transparent; width: 100%; text-align: left; color: inherit; }
+.sb-setup-member.claimable:hover { border-color: var(--gold); background: rgba(201, 162, 39, 0.08); }
+.sb-league-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #9ad6b3; background: rgba(154,214,179,0.1); border: 1px solid rgba(154,214,179,0.25); padding: 0.2rem 0.5rem; border-radius: 3px; }
+
+.sb-ticket-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; margin-top: 0.25rem; }
+
+.sb-board-line { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; }
+.sb-board-line-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.65rem; }
+.sb-board-line-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--paper); letter-spacing: 0.02em; line-height: 1.15; }
+.sb-board-line-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.2rem; }
+.sb-board-sides { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.sb-board-side { display: flex; align-items: center; gap: 0.45rem; background: var(--paper); color: var(--ink); border-radius: 4px; padding: 0.35rem 0.45rem 0.35rem 0.55rem; }
+.sb-board-side-label { font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500; }
+.sb-board-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; font-weight: 600; color: var(--green); min-width: 2.8rem; }
+.sb-board-stake { width: 3.2rem; padding: 0.3rem 0.35rem; border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; background: #fbf6ea; color: var(--ink); }
+.sb-board-take { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.35rem 0.5rem; border-radius: 3px; border: none; background: var(--gold); color: #241d05; cursor: pointer; font-weight: 600; }
+.sb-board-take:disabled { opacity: 0.4; cursor: default; }
+.sb-board-section { margin-bottom: 1.5rem; }
+.sb-board-section h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }
+.sb-board-filters { display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: flex-end; background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+.sb-board-filter { display: flex; flex-direction: column; gap: 0.25rem; min-width: 7.5rem; }
+.sb-board-filter label { font-family: 'IBM Plex Mono', monospace; font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; color: #7ea08f; }
+.sb-board-filter select { padding: 0.35rem 0.45rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 0.78rem; min-width: 7.5rem; }
+.sb-board-filter-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.sb-board-pill { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.3rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: #9ab5a8; cursor: pointer; }
+.sb-board-pill.active { background: var(--gold); color: #241d05; border-color: var(--gold); font-weight: 600; }
+.sb-board-count { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-left: auto; align-self: center; }
+
+.dk-event { background: var(--felt-dark); border-radius: 8px; margin-bottom: 0.85rem; overflow: hidden; border: 1px solid var(--line); }
+.dk-event-header { padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.15); }
+.dk-event-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; font-weight: 400; color: var(--gold-bright); letter-spacing: 0.04em; }
+.dk-event-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-top: 0.15rem; }
+.dk-event-markets { padding: 0.35rem 0; }
+.dk-market { padding: 0.65rem 1rem; border-bottom: 1px solid var(--line); }
+.dk-market:last-child { border-bottom: none; }
+.dk-market-head { margin-bottom: 0.55rem; }
+.dk-market-title { font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600; color: var(--paper); line-height: 1.3; }
+.dk-market-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; margin-top: 0.15rem; }
+.dk-odds-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.45rem; }
+.dk-odds-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; min-height: 3.4rem; padding: 0.45rem 0.5rem; border-radius: 6px; border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: var(--paper); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.dk-odds-btn:hover:not(:disabled) { border-color: var(--gold); background: rgba(201, 162, 39, 0.08); }
+.dk-odds-btn.selected { border-color: var(--gold); background: rgba(201, 162, 39, 0.15); box-shadow: inset 0 0 0 1px var(--gold); }
+.dk-odds-btn:disabled { opacity: 0.35; cursor: default; }
+.dk-odds-label { font-size: 0.72rem; font-weight: 600; text-align: center; line-height: 1.2; }
+.dk-odds-sublabel { font-size: 0.62rem; color: #7ea08f; }
+.dk-odds-value { font-family: 'IBM Plex Mono', monospace; font-size: 0.88rem; font-weight: 700; color: var(--gold-bright); margin-top: 0.1rem; }
+
+.dk-betslip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; background: var(--felt-dark); border-top: 2px solid var(--line); box-shadow: 0 -8px 24px rgba(0,0,0,0.35); }
+.dk-betslip-inner { max-width: 880px; margin: 0 auto; padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.dk-betslip-pick { flex: 1; min-width: 140px; }
+.dk-betslip-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold-bright); }
+.dk-betslip-title { font-size: 0.82rem; font-weight: 600; color: var(--paper); margin-top: 0.1rem; }
+.dk-betslip-detail { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; }
+.dk-betslip-actions { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.dk-betslip-stake-wrap { display: flex; flex-direction: column; gap: 0.15rem; }
+.dk-betslip-stake-wrap label { font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #7ea08f; text-transform: uppercase; }
+.dk-betslip-stake { width: 4.5rem; padding: 0.4rem 0.45rem; border-radius: 4px; border: 1px solid #c9bb95; background: #fbf6ea; color: var(--ink); font-size: 0.85rem; font-weight: 600; }
+.dk-betslip-payout { display: flex; flex-direction: column; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
+.dk-betslip-payout strong { font-size: 0.95rem; color: var(--gold-bright); }
+.dk-betslip-place { padding: 0.65rem 1.1rem; border-radius: 4px; border: none; background: var(--gold); color: #241d05; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
+.dk-betslip-place:hover { background: var(--gold-bright); }
+.dk-betslip-clear { padding: 0.45rem; border-radius: 4px; border: 1px solid var(--line); background: transparent; color: #7ea08f; cursor: pointer; display: flex; align-items: center; }
+
+.dk-custom-builder { padding: 0.85rem 1rem 1rem; }
+.dk-custom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.75rem; }
+@media (max-width: 560px) { .dk-custom-row { grid-template-columns: 1fr; } }
+.dk-custom-field label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #7ea08f; margin-bottom: 0.3rem; }
+.dk-custom-field select { width: 100%; padding: 0.5rem 0.55rem; border-radius: 4px; border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: var(--paper); font-size: 0.82rem; }
+.dk-player-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; }
+.dk-player-chip { padding: 0.35rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,0.15); color: #c8ddd2; font-size: 0.72rem; cursor: pointer; }
+.dk-player-chip.active { border-color: var(--gold); background: rgba(201, 162, 39, 0.15); color: var(--paper); font-weight: 600; }
+.dk-custom-toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #a9c4b6; margin-bottom: 0.75rem; cursor: pointer; }
+.dk-sport-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.dk-sport-chip { padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: rgba(0,0,0,0.15); border: 1px solid var(--line); color: #a9c4b6; cursor: pointer; }
+.dk-sport-chip.active { background: var(--gold); color: #241d05; border-color: var(--gold); }
+.sb-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.75rem; }
+.sb-matchup-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.sb-matchup-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.75rem; align-items: stretch; margin-bottom: 1.25rem; }
+.sb-matchup-team { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; }
+.sb-matchup-team.you { border-color: var(--gold); }
+.sb-matchup-team h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.03em; }
+.sb-matchup-total { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; margin-bottom: 0.65rem; }
+.sb-matchup-vs { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; color: #7ea08f; display: flex; align-items: center; justify-content: center; }
+.sb-matchup-player { display: grid; grid-template-columns: 2.2rem 1fr auto auto; gap: 0.35rem 0.5rem; align-items: center; padding: 0.35rem 0.4rem; border-top: 1px solid rgba(63,102,87,0.45); font-size: 0.78rem; width: 100%; border-left: none; border-right: none; border-bottom: none; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; border-radius: 4px; transition: background 0.12s, outline 0.12s; }
+.sb-matchup-player:first-of-type { border-top: none; }
+.sb-matchup-player:hover { background: rgba(255,255,255,0.04); }
+.sb-matchup-player.selected { background: rgba(201, 162, 39, 0.12); outline: 1px solid var(--gold); }
+.sb-matchup-pos { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
+.sb-matchup-name { font-weight: 500; }
+.sb-matchup-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
+.sb-matchup-proj { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #c9e8d4; min-width: 2.8rem; text-align: right; }
+.sb-matchup-actual { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--gold-bright); min-width: 2.8rem; text-align: right; }
+.sb-matchup-bets h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }

@@ -3,8 +3,12 @@ import {
   Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, ScrollText,
   Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords,
 } from "lucide-react";
+import * as leaguesApi from "./lib/leaguesApi.js";
+import * as membersApi from "./lib/membersApi.js";
+import * as betsApi from "./lib/betsApi.js";
+import { signOut } from "./lib/auth.js";
+import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
 
-const STORAGE_KEY = "league-book-v1";
 const BUILD_STAMP = "DEV";
 const REGULAR_SEASON_WEEKS = 18;
 
@@ -40,23 +44,6 @@ function clampWeekToSeason(week, currentWeek) {
   const w = Number(week);
   if (!Number.isFinite(w) || w < 1) return currentWeek;
   return Math.min(currentWeek, Math.max(1, w));
-}
-
-function loadStored() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveStored(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // ignore quota errors
-  }
 }
 
 function buildMembers(rosters, users) {
@@ -727,8 +714,6 @@ function computeLedger(betList, members, weekFilter = null) {
 
 const isWeeklyBet = (type) => type !== "season";
 
-let TICKET_SEQ = 1001;
-
 const STATUS_STYLE = {
   pending: { label: "PENDING", color: "#8a6d1f", rotate: -8 },
   accepted: { label: "ON THE BOARD", color: "#3a6b52", rotate: -6 },
@@ -736,42 +721,68 @@ const STATUS_STYLE = {
   settled: { label: "GRADED", color: "#4b4b4b", rotate: -6 },
 };
 
-export default function LeagueSportsbook() {
-  const stored = useMemo(() => (typeof window !== "undefined" ? loadStored() : null), []);
+function applyBetPatch(prev, payload, ownerIdByDbId) {
+  const { eventType, new: newRow, old: oldRow } = payload;
+  if (eventType === "DELETE") {
+    return prev.filter((b) => b.id !== oldRow.id);
+  }
+  const mapped = betsApi.dbRowToBet(newRow, ownerIdByDbId);
+  const idx = prev.findIndex((b) => b.id === mapped.id);
+  if (idx === -1) return [mapped, ...prev];
+  const next = prev.slice();
+  next[idx] = mapped;
+  return next;
+}
 
+function applyMemberPatch(prev, payload) {
+  const { eventType, new: newRow, old: oldRow } = payload;
+  if (eventType === "DELETE") {
+    return prev.filter((m) => m.dbId !== oldRow.id);
+  }
+  const mapped = membersApi.dbRowToMember(newRow);
+  const idx = prev.findIndex((m) => m.dbId === mapped.dbId);
+  if (idx === -1) return [...prev, mapped];
+  const next = prev.slice();
+  next[idx] = mapped;
+  return next;
+}
+
+export default function LeagueSportsbook({ session }) {
   const [league, setLeague] = useState({
-    linked: !!(stored?.leagueId && stored?.viewerId),
-    leagueId: stored?.leagueId || "",
-    leagueName: stored?.leagueName || "",
+    linked: false,
+    dbId: null,
+    leagueId: "",
+    leagueName: "",
     loading: false,
     error: null,
-    week: stored?.week || 1,
-    season: stored?.season || new Date().getFullYear(),
-    nflSeasonType: stored?.nflSeasonType || "regular",
-    scoringField: stored?.scoringField || "pts_ppr",
-    scoringLabel: stored?.scoringLabel || "PPR",
-    projectionSeason: stored?.projectionSeason || stored?.season || new Date().getFullYear(),
-    inputId: stored?.leagueId || "",
+    week: 1,
+    season: new Date().getFullYear(),
+    nflSeasonType: "regular",
+    scoringField: "pts_ppr",
+    scoringLabel: "PPR",
+    projectionSeason: new Date().getFullYear(),
+    inputId: "",
   });
-  const [members, setMembers] = useState(stored?.members || []);
-  const [bets, setBets] = useState(stored?.bets || []);
-  const [ticketSeq, setTicketSeq] = useState(stored?.ticketSeq || TICKET_SEQ);
+  const [members, setMembers] = useState([]);
+  const [bets, setBets] = useState([]);
+  const [bootstrapping, setBootstrapping] = useState(true);
   const [tab, setTab] = useState("slips");
-  const [viewer, setViewer] = useState(stored?.viewerId || "");
-  const [setupViewer, setSetupViewer] = useState(stored?.viewerId || "");
   const [showForm, setShowForm] = useState(false);
   const [betErrors, setBetErrors] = useState({});
+
+  const viewer = useMemo(
+    () => members.find((m) => m.userId === session.user.id)?.id || "",
+    [members, session.user.id],
+  );
 
   const defaultOpponent = members.find((m) => m.id !== viewer)?.id || "";
 
   const [form, setForm] = useState({
-    type: "matchup", title: "", opponent: defaultOpponent, stake: 10, week: stored?.week || 1,
+    type: "matchup", title: "", opponent: defaultOpponent, stake: 10, week: 1,
     playerId: "", line: "", creatorSide: "over",
   });
   const [ledgerView, setLedgerView] = useState("weekly");
-  const [selectedWeek, setSelectedWeek] = useState(
-    stored?.selectedWeek || stored?.week || 1,
-  );
+  const [selectedWeek, setSelectedWeek] = useState(1);
 
   const [weekCache, setWeekCache] = useState({});
   const weekCacheRef = useRef({});
@@ -797,26 +808,54 @@ export default function LeagueSportsbook() {
     [members],
   );
 
-  const leagueReady = league.linked && members.length > 0 && viewer;
+  const leagueReady = league.linked && members.length > 0 && !!viewer;
 
+  const dbIdByOwnerId = useMemo(
+    () => Object.fromEntries(members.map((m) => [m.id, m.dbId])),
+    [members],
+  );
+  const ownerIdByDbId = useMemo(
+    () => Object.fromEntries(members.map((m) => [m.dbId, m.id])),
+    [members],
+  );
+  const ownerIdByDbIdRef = useRef({});
+  useEffect(() => { ownerIdByDbIdRef.current = ownerIdByDbId; }, [ownerIdByDbId]);
+
+  // ---------- bootstrap: does this account already belong to a league? ----------
   useEffect(() => {
-    if (!league.linked) return;
-    saveStored({
-      leagueId: league.leagueId,
-      leagueName: league.leagueName,
-      members,
-      viewerId: viewer,
-      bets,
-      ticketSeq,
-      selectedWeek,
-      week: league.week,
-      season: league.season,
-      nflSeasonType: league.nflSeasonType,
-      scoringField: league.scoringField,
-      scoringLabel: league.scoringLabel,
-      projectionSeason: league.projectionSeason,
-    });
-  }, [league.linked, league.leagueId, league.leagueName, league.week, league.season, league.nflSeasonType, league.scoringField, league.scoringLabel, league.projectionSeason, members, viewer, bets, ticketSeq, selectedWeek]);
+    let cancelled = false;
+    membersApi.findMyMembership(session.user.id)
+      .then(async (row) => {
+        if (cancelled) return;
+        if (!row) {
+          setBootstrapping(false);
+          return;
+        }
+        const leagueRow = row.leagues;
+        const memberRows = await membersApi.fetchMembers(leagueRow.id);
+        if (cancelled) return;
+        setMembers(memberRows);
+        setLeague((s) => ({
+          ...s,
+          linked: true,
+          dbId: leagueRow.id,
+          leagueId: leagueRow.sleeper_league_id,
+          leagueName: leagueRow.name,
+          week: leagueRow.current_week,
+          season: leagueRow.season,
+          nflSeasonType: leagueRow.nfl_season_type,
+          scoringField: leagueRow.scoring_field,
+          scoringLabel: leagueRow.scoring_label,
+          projectionSeason: leagueRow.projection_season,
+          inputId: leagueRow.sleeper_league_id,
+        }));
+        setSelectedWeek(leagueRow.current_week);
+        setForm((f) => ({ ...f, week: leagueRow.current_week }));
+        setBootstrapping(false);
+      })
+      .catch(() => setBootstrapping(false));
+    return () => { cancelled = true; };
+  }, [session.user.id]);
 
   useEffect(() => {
     if (defaultOpponent && !members.some((m) => m.id === form.opponent && m.id !== viewer)) {
@@ -860,10 +899,21 @@ export default function LeagueSportsbook() {
     setLeague((s) => ({ ...s, loading: true, error: null }));
     try {
       const data = await fetchLeagueData(leagueId);
-      setMembers(data.members);
+      const leagueRow = await leaguesApi.upsertLeague(leagueId.trim(), {
+        name: data.leagueName,
+        season: data.season,
+        nfl_season_type: data.nflSeasonType,
+        scoring_field: data.scoringField,
+        scoring_label: data.scoringLabel,
+        projection_season: data.projectionSeason,
+        current_week: data.week,
+      });
+      const memberRows = await membersApi.syncMembersFromSleeper(leagueRow.id, data.members);
+      setMembers(memberRows);
       setLeague((s) => ({
         ...s,
-        linked: false,
+        linked: true,
+        dbId: leagueRow.id,
         leagueId: leagueId.trim(),
         leagueName: data.leagueName,
         week: data.week,
@@ -878,7 +928,6 @@ export default function LeagueSportsbook() {
       }));
       setSelectedWeek(data.week);
       setForm((f) => ({ ...f, week: data.week }));
-      setSetupViewer((prev) => prev || data.members[0]?.id || "");
     } catch {
       setLeague((s) => ({
         ...s,
@@ -888,21 +937,31 @@ export default function LeagueSportsbook() {
     }
   }, [fetchLeagueData]);
 
-  const finishSetup = useCallback(() => {
-    if (!setupViewer) return;
-    setViewer(setupViewer);
-    setLeague((s) => ({ ...s, linked: true }));
-    setTab("slips");
-  }, [setupViewer]);
+  const handleClaim = useCallback(async (memberDbId) => {
+    await membersApi.claimMember(memberDbId, session.user.id);
+    const rows = await membersApi.fetchMembers(league.dbId);
+    setMembers(rows);
+  }, [session.user.id, league.dbId]);
 
   const refreshLeague = useCallback(async () => {
-    if (!league.leagueId) return;
+    if (!league.leagueId || !league.dbId) return;
     setLeague((s) => ({ ...s, loading: true, error: null }));
     try {
       const data = await fetchLeagueData(league.leagueId);
-      setMembers(data.members);
+      const leagueRow = await leaguesApi.upsertLeague(league.leagueId, {
+        name: data.leagueName,
+        season: data.season,
+        nfl_season_type: data.nflSeasonType,
+        scoring_field: data.scoringField,
+        scoring_label: data.scoringLabel,
+        projection_season: data.projectionSeason,
+        current_week: data.week,
+      });
+      const memberRows = await membersApi.syncMembersFromSleeper(leagueRow.id, data.members);
+      setMembers(memberRows);
       setLeague((s) => ({
         ...s,
+        dbId: leagueRow.id,
         leagueName: data.leagueName,
         week: data.week,
         season: data.season,
@@ -921,49 +980,38 @@ export default function LeagueSportsbook() {
         error: "Couldn't refresh league data. Try again in a moment.",
       }));
     }
-  }, [fetchLeagueData, league.leagueId]);
+  }, [fetchLeagueData, league.leagueId, league.dbId]);
 
-  const disconnectLeague = useCallback(() => {
-    if (!window.confirm("Disconnect this league? All local bets and balances will be cleared.")) return;
-    localStorage.removeItem(STORAGE_KEY);
-    setLeague({
-      linked: false,
-      leagueId: "",
-      leagueName: "",
-      loading: false,
-      error: null,
-      week: 1,
-      season: new Date().getFullYear(),
-      nflSeasonType: "regular",
-      scoringField: "pts_ppr",
-      scoringLabel: "PPR",
-      projectionSeason: new Date().getFullYear(),
-      inputId: "",
-    });
-    setMembers([]);
-    setBets([]);
-    setViewer("");
-    setSetupViewer("");
-    setTicketSeq(TICKET_SEQ);
-    setWeekCache({});
-    weekCacheRef.current = {};
-    loadingWeeksRef.current.clear();
-    setPlayers({});
-    setBoardCategory("all");
-    setBoardFantasyTeam("all");
-    setBoardPosition("all");
-    setBoardNflTeam("all");
-    setGlobalStake(10);
-    setBetSlipPick(null);
-    setCustomH2H({ myPlayerId: "", oppMemberId: "", oppPlayerId: "" });
-    setTab("slips");
+  const disconnectLeague = useCallback(async () => {
+    if (!window.confirm("Sign out of this device? Nobody else's data is affected.")) return;
+    await signOut();
   }, []);
 
   useEffect(() => {
-    if (league.linked && league.leagueId) refreshLeague();
-    // only refresh roster names on first load of a linked league
+    if (league.dbId) refreshLeague();
+    // only re-sync roster names once we know which league this session belongs to
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [league.dbId]);
+
+  // ---------- shared bets/members sync (Supabase Realtime) ----------
+  useEffect(() => {
+    if (!league.dbId) return;
+    let cancelled = false;
+    betsApi.fetchBets(league.dbId, ownerIdByDbIdRef.current).then((rows) => {
+      if (!cancelled) setBets(rows);
+    });
+    const offBets = betsApi.subscribeToBets(league.dbId, (payload) => {
+      setBets((prev) => applyBetPatch(prev, payload, ownerIdByDbIdRef.current));
+    });
+    const offMembers = membersApi.subscribeToMembers(league.dbId, (payload) => {
+      setMembers((prev) => applyMemberPatch(prev, payload));
+    });
+    return () => {
+      cancelled = true;
+      offBets();
+      offMembers();
+    };
+  }, [league.dbId]);
 
   const loadWeekData = useCallback(async (weekNum, { force = false, showSpinner = false } = {}) => {
     if (!league.leagueId) return false;
@@ -1142,6 +1190,7 @@ export default function LeagueSportsbook() {
     () => bets.filter((b) => Number(b.week) === activeWeek),
     [bets, activeWeek],
   );
+
   const seasonBets = useMemo(
     () => bets.filter((b) => b.week == null || b.week === ""),
     [bets],
@@ -1428,8 +1477,6 @@ export default function LeagueSportsbook() {
     let opponent = "";
     let title = offering.title;
     const bet = {
-      id: "b" + Date.now(),
-      ticket: ticketSeq,
       type: offering.type,
       title,
       creator: viewer,
@@ -1493,8 +1540,9 @@ export default function LeagueSportsbook() {
 
     if (!bet.opponent) return;
 
-    setBets((prev) => [bet, ...prev]);
-    setTicketSeq((n) => n + 1);
+    betsApi.insertBet(league.dbId, bet, dbIdByOwnerId).catch((err) => {
+      window.alert(err.message || "Couldn't place that bet — try again.");
+    });
     setBetSlipPick(null);
     setTab("slips");
     setSelectedWeek(offering.week ?? activeWeek);
@@ -1506,17 +1554,21 @@ export default function LeagueSportsbook() {
     return { owes, owed, net: weeklyLedger.totals[viewer] || 0 };
   }, [weeklyLedger, viewer]);
 
-  function advance(betId, action) {
+  async function advance(betId, action) {
     setBetErrors((e) => ({ ...e, [betId]: null }));
-    setBets((prev) => prev.map((b) => {
-      if (b.id !== betId) return b;
-      if (action === "accept") return { ...b, status: "accepted" };
-      if (action === "decline") return { ...b, status: "declined" };
-      if (action === "lock") return { ...b, status: "locked" };
-      if (action === "grade-creator") return { ...b, status: "settled", result: "creator" };
-      if (action === "grade-opponent") return { ...b, status: "settled", result: "opponent" };
-      return b;
-    }));
+    const patch = {
+      accept: { status: "accepted" },
+      decline: { status: "declined" },
+      lock: { status: "locked" },
+      "grade-creator": { status: "settled", result: "creator" },
+      "grade-opponent": { status: "settled", result: "opponent" },
+    }[action];
+    if (!patch) return;
+    try {
+      await betsApi.updateBetStatus(betId, patch);
+    } catch (err) {
+      setBetErrors((e) => ({ ...e, [betId]: err.message || "Couldn't update that bet — try again." }));
+    }
   }
 
   async function autoGrade(bet) {
@@ -1530,6 +1582,14 @@ export default function LeagueSportsbook() {
         [bet.id]: `Couldn't load week ${wk} scores from Sleeper — try again in a moment.`,
       }));
       return;
+    }
+
+    async function settle(patch) {
+      try {
+        await betsApi.updateBetStatus(bet.id, { status: "settled", ...patch });
+      } catch (err) {
+        setBetErrors((e) => ({ ...e, [bet.id]: err.message || "Couldn't save the grade — try again." }));
+      }
     }
 
     if (bet.type === "matchup") {
@@ -1558,9 +1618,7 @@ export default function LeagueSportsbook() {
           return;
         }
         const pickWins = bet.pickMemberId === mPick.id ? ptsPick > ptsPeer : ptsPeer > ptsPick;
-        setBets((prev) => prev.map((b) => b.id === bet.id
-          ? { ...b, status: "settled", result: pickWins ? "creator" : "opponent", actual: ptsPick }
-          : b));
+        await settle({ result: pickWins ? "creator" : "opponent", actual: ptsPick });
         return;
       }
 
@@ -1576,7 +1634,7 @@ export default function LeagueSportsbook() {
         setBetErrors((e) => ({ ...e, [bet.id]: `Tied at ${dataA.points} pts — grade manually (push?).` }));
         return;
       }
-      setBets((prev) => prev.map((b) => b.id === bet.id ? { ...b, status: "settled", result } : b));
+      await settle({ result });
       return;
     }
 
@@ -1593,9 +1651,7 @@ export default function LeagueSportsbook() {
           return;
         }
         const pickWins = bet.pickPlayerId === bet.playerIdA ? ptsA > ptsB : ptsB > ptsA;
-        setBets((prev) => prev.map((b) => b.id === bet.id
-          ? { ...b, status: "settled", result: pickWins ? "creator" : "opponent", actual: ptsA }
-          : b));
+        await settle({ result: pickWins ? "creator" : "opponent", actual: ptsA });
         return;
       }
 
@@ -1609,9 +1665,7 @@ export default function LeagueSportsbook() {
         }
         const over = actual > Number(bet.line);
         const creatorWins = (bet.creatorSide === "over" && over) || (bet.creatorSide === "under" && !over);
-        setBets((prev) => prev.map((b) => b.id === bet.id
-          ? { ...b, status: "settled", result: creatorWins ? "creator" : "opponent", actual }
-          : b));
+        await settle({ result: creatorWins ? "creator" : "opponent", actual });
         return;
       }
 
@@ -1625,9 +1679,7 @@ export default function LeagueSportsbook() {
         const actual = data.points;
         const over = actual > Number(bet.line);
         const creatorWins = (bet.creatorSide === "over" && over) || (bet.creatorSide === "under" && !over);
-        setBets((prev) => prev.map((b) => b.id === bet.id
-          ? { ...b, status: "settled", result: creatorWins ? "creator" : "opponent", actual }
-          : b));
+        await settle({ result: creatorWins ? "creator" : "opponent", actual });
         return;
       }
       if (!bet.playerId || bet.line === "" || bet.line === undefined) {
@@ -1642,9 +1694,7 @@ export default function LeagueSportsbook() {
       const actual = row.players_points[bet.playerId];
       const over = actual > Number(bet.line);
       const creatorWins = (bet.creatorSide === "over" && over) || (bet.creatorSide === "under" && !over);
-      setBets((prev) => prev.map((b) => b.id === bet.id
-        ? { ...b, status: "settled", result: creatorWins ? "creator" : "opponent", actual }
-        : b));
+      await settle({ result: creatorWins ? "creator" : "opponent", actual });
       return;
     }
 
@@ -1655,7 +1705,7 @@ export default function LeagueSportsbook() {
     e.preventDefault();
     if (!form.title.trim()) return;
     const newBet = {
-      id: "b" + Date.now(), ticket: ticketSeq, type: form.type,
+      type: form.type,
       title: form.title.trim(), creator: viewer, opponent: form.opponent,
       stake: Number(form.stake) || 0, status: "pending", result: null,
       ...(isWeeklyBet(form.type) ? { week: Number(form.week) || Number(league.week) || 1 } : {}),
@@ -1663,8 +1713,9 @@ export default function LeagueSportsbook() {
         ? { playerId: form.playerId.trim(), line: form.line, creatorSide: form.creatorSide }
         : {}),
     };
-    setBets((prev) => [newBet, ...prev]);
-    setTicketSeq((n) => n + 1);
+    betsApi.insertBet(league.dbId, newBet, dbIdByOwnerId).catch((err) => {
+      window.alert(err.message || "Couldn't post that slip — try again.");
+    });
     setForm({
       type: "matchup", title: "", opponent: defaultOpponent, stake: 10,
       week: activeWeek,
@@ -1753,299 +1804,40 @@ export default function LeagueSportsbook() {
     };
   }, [weekBets]);
 
+  if (bootstrapping) return <div className="sb-root" />;
+
   return (
     <div className="sb-root">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
-
-        .sb-root {
-          --felt: #163229; --felt-dark: #102520;
-          --paper: #f2e8d2; --ink: #23281f;
-          --gold: #c9a227; --gold-bright: #e0bc4a;
-          --red: #a6373c; --green: #3f6b52; --line: #3f6657;
-          font-family: 'Inter', sans-serif;
-          background: var(--felt);
-          background-image:
-            radial-gradient(circle at 20% 10%, rgba(255,255,255,0.03), transparent 40%),
-            radial-gradient(circle at 80% 80%, rgba(255,255,255,0.03), transparent 40%);
-          color: var(--paper);
-          min-height: 100%;
-          padding-bottom: 5.5rem;
-        }
-        .sb-display { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.03em; }
-        .sb-mono { font-family: 'IBM Plex Mono', monospace; }
-
-        .sb-marquee { border-bottom: 2px solid var(--line); background: linear-gradient(180deg, var(--felt-dark), var(--felt)); padding: 1.1rem 1.25rem 1rem; }
-        .sb-marquee-title { font-size: 2rem; line-height: 1; color: var(--gold-bright); text-shadow: 0 1px 0 rgba(0,0,0,0.4); }
-        .sb-marquee-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; letter-spacing: 0.12em; color: #a9c4b6; text-transform: uppercase; }
-
-        .sb-viewer-select { background: var(--felt-dark); border: 1px solid var(--line); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 3px; }
-
-        .sb-tabs { display: flex; gap: 0.3rem; padding: 0.9rem 1.25rem 0; flex-wrap: wrap; }
-        .sb-tab { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.04em; padding: 0.5rem 1.1rem 0.6rem; color: #a9c4b6; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; }
-        .sb-tab.active { color: var(--gold-bright); border-bottom-color: var(--gold); }
-
-        .sb-newbet-btn { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; background: var(--gold); color: #241d05; border: none; padding: 0.5rem 0.8rem; border-radius: 3px; display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-weight: 600; }
-        .sb-newbet-btn:hover { background: var(--gold-bright); }
-
-        .sb-content { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
-
-        .sb-ticket { position: relative; background: var(--paper); color: var(--ink); border-radius: 4px; padding: 1.1rem 1.2rem 1rem; margin-bottom: 1.4rem; box-shadow: 0 6px 14px rgba(0,0,0,0.28); }
-        .sb-ticket::before, .sb-ticket::after { content: ""; position: absolute; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; background: var(--felt); border-radius: 50%; }
-        .sb-ticket::before { left: -10px; } .sb-ticket::after { right: -10px; }
-        .sb-ticket-perf { border-top: 2px dashed #cdbf9c; margin: 0.7rem 0; }
-        .sb-ticket-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
-        .sb-ticket-num { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; letter-spacing: 0.08em; }
-        .sb-ticket-type { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; background: var(--felt); color: var(--gold-bright); padding: 0.15rem 0.5rem; border-radius: 2px; margin-bottom: 0.35rem; }
-        .sb-ticket-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; line-height: 1.15; letter-spacing: 0.01em; }
-        .sb-ticket-parties { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #5a5340; margin-top: 0.3rem; }
-        .sb-ticket-stake { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--green); text-align: right; white-space: nowrap; }
-        .sb-ticket-stake span { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #8a7c55; letter-spacing: 0.1em; }
-
-        .sb-stamp { position: absolute; top: 0.9rem; right: 1.1rem; font-family: 'Bebas Neue', sans-serif; font-size: 0.85rem; letter-spacing: 0.12em; padding: 0.15rem 0.5rem; border: 2px solid currentColor; border-radius: 3px; opacity: 0.85; pointer-events: none; }
-
-        .sb-ticket-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.6rem; }
-        .sb-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.4rem 0.65rem; border-radius: 3px; border: 1px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.3rem; font-weight: 600; }
-        .sb-btn-accept { background: var(--green); color: #eef7ef; }
-        .sb-btn-decline { background: transparent; color: var(--red); border-color: var(--red); }
-        .sb-btn-lock { background: var(--ink); color: var(--paper); }
-        .sb-btn-grade { background: transparent; color: var(--ink); border-color: #8a7c55; }
-        .sb-btn-auto { background: var(--gold); color: #241d05; }
-        .sb-btn:hover { filter: brightness(1.08); }
-        .sb-btn:disabled { opacity: 0.5; cursor: default; }
-
-        .sb-result-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #5a5340; margin-top: 0.5rem; }
-        .sb-result-line b { color: var(--green); }
-        .sb-bet-error { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--red); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
-
-        .sb-board { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 1.1rem 1.2rem; margin-bottom: 1.5rem; }
-        .sb-board h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.75rem; }
-        .sb-board p.sb-note { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; margin: -0.4rem 0 0.9rem; line-height: 1.5; }
-        .sb-standing-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
-        .sb-standing-row:last-child { border-bottom: none; }
-        .sb-standing-name { font-family: 'Inter', sans-serif; font-weight: 600; }
-        .sb-owe-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
-        .sb-owe-row:last-child { border-bottom: none; }
-        .sb-empty { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: #7ea08f; padding: 0.5rem 0; }
-
-        .sb-form-panel { background: var(--paper); color: var(--ink); border-radius: 6px; padding: 1.1rem 1.2rem; margin-bottom: 1.5rem; }
-        .sb-form-panel h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; margin: 0 0 0.75rem; }
-        .sb-field { margin-bottom: 0.75rem; }
-        .sb-field label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6144; margin-bottom: 0.25rem; }
-        .sb-field input, .sb-field select { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid #c9bb95; border-radius: 3px; font-family: 'Inter', sans-serif; font-size: 0.85rem; background: #fbf6ea; color: var(--ink); }
-        .sb-form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-        .sb-form-row > .sb-field { flex: 1; min-width: 120px; }
-        .sb-form-actions { display: flex; gap: 0.6rem; margin-top: 0.4rem; }
-        .sb-btn-submit { background: var(--green); color: #eef7ef; }
-        .sb-btn-cancel { background: transparent; color: #6b6144; border-color: #c9bb95; }
-
-        .sb-sync-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
-        .sb-sync-row:last-child { border-bottom: none; }
-        .sb-sync-select { background: var(--paper); color: var(--ink); border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.3rem 0.5rem; }
-        .sb-error-banner { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #e0949a; margin-top: 0.5rem; display: flex; gap: 0.4rem; align-items: center; }
-        .sb-week-points { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; }
-
-        .sb-ledger-toggle { display: flex; gap: 0.35rem; margin-bottom: 1rem; }
-        .sb-ledger-toggle button { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.45rem 0.75rem; border-radius: 3px; border: 1px solid var(--line); background: transparent; color: #a9c4b6; cursor: pointer; }
-        .sb-ledger-toggle button.active { background: var(--gold); color: #241d05; border-color: var(--gold); font-weight: 600; }
-
-        .sb-week-nav { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1rem; }
-        .sb-week-nav button { background: var(--felt); border: 1px solid var(--line); color: var(--paper); border-radius: 3px; padding: 0.35rem 0.45rem; cursor: pointer; display: flex; align-items: center; }
-        .sb-week-nav button:disabled { opacity: 0.35; cursor: default; }
-        .sb-week-nav-label { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.04em; color: var(--gold-bright); min-width: 8rem; text-align: center; }
-        .sb-week-select { padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 0.82rem; min-width: 6.5rem; }
-
-        .sb-statement-header { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #7ea08f; margin-bottom: 0.75rem; }
-        .sb-statement-personal { background: rgba(201, 162, 39, 0.08); border: 1px solid rgba(201, 162, 39, 0.35); border-radius: 4px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
-        .sb-statement-personal h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; color: var(--gold-bright); margin: 0 0 0.5rem; letter-spacing: 0.04em; }
-        .sb-statement-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; padding: 0.25rem 0; color: #c8ddd2; }
-        .sb-activity-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; }
-        .sb-activity-row:last-child { border-bottom: none; }
-        .sb-activity-title { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 0.82rem; color: var(--paper); margin-bottom: 0.15rem; }
-        .sb-activity-meta { color: #7ea08f; font-size: 0.68rem; }
-        .sb-slips-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; }
-        .sb-slips-summary { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; letter-spacing: 0.04em; }
-        .sb-season-section { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
-        .sb-season-section h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.35rem; }
-        .sb-season-section .sb-note { margin-bottom: 1rem; }
-
-        .sb-setup { max-width: 520px; margin: 3rem auto; padding: 0 1.25rem; }
-        .sb-setup-card { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem 1.4rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
-        .sb-setup-card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.04em; }
-        .sb-setup-card p { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #7ea08f; line-height: 1.6; margin: 0 0 1.1rem; }
-        .sb-setup-members { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.75rem 0 1rem; max-height: 220px; overflow-y: auto; }
-        .sb-setup-member { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-radius: 4px; border: 1px solid var(--line); font-family: 'Inter', sans-serif; font-size: 0.85rem; }
-        .sb-setup-member span.sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; }
-        .sb-league-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #9ad6b3; background: rgba(154,214,179,0.1); border: 1px solid rgba(154,214,179,0.25); padding: 0.2rem 0.5rem; border-radius: 3px; }
-
-        .sb-ticket-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; margin-top: 0.25rem; }
-
-        .sb-board-line { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; }
-        .sb-board-line-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.65rem; }
-        .sb-board-line-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--paper); letter-spacing: 0.02em; line-height: 1.15; }
-        .sb-board-line-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.2rem; }
-        .sb-board-sides { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-        .sb-board-side { display: flex; align-items: center; gap: 0.45rem; background: var(--paper); color: var(--ink); border-radius: 4px; padding: 0.35rem 0.45rem 0.35rem 0.55rem; }
-        .sb-board-side-label { font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500; }
-        .sb-board-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; font-weight: 600; color: var(--green); min-width: 2.8rem; }
-        .sb-board-stake { width: 3.2rem; padding: 0.3rem 0.35rem; border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; background: #fbf6ea; color: var(--ink); }
-        .sb-board-take { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.35rem 0.5rem; border-radius: 3px; border: none; background: var(--gold); color: #241d05; cursor: pointer; font-weight: 600; }
-        .sb-board-take:disabled { opacity: 0.4; cursor: default; }
-        .sb-board-section { margin-bottom: 1.5rem; }
-        .sb-board-section h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }
-        .sb-board-filters { display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: flex-end; background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
-        .sb-board-filter { display: flex; flex-direction: column; gap: 0.25rem; min-width: 7.5rem; }
-        .sb-board-filter label { font-family: 'IBM Plex Mono', monospace; font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; color: #7ea08f; }
-        .sb-board-filter select { padding: 0.35rem 0.45rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 0.78rem; min-width: 7.5rem; }
-        .sb-board-filter-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-        .sb-board-pill { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.3rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: #9ab5a8; cursor: pointer; }
-        .sb-board-pill.active { background: var(--gold); color: #241d05; border-color: var(--gold); font-weight: 600; }
-        .sb-board-count { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-left: auto; align-self: center; }
-
-        .dk-event { background: var(--felt-dark); border-radius: 8px; margin-bottom: 0.85rem; overflow: hidden; border: 1px solid var(--line); }
-        .dk-event-header { padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.15); }
-        .dk-event-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; font-weight: 400; color: var(--gold-bright); letter-spacing: 0.04em; }
-        .dk-event-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-top: 0.15rem; }
-        .dk-event-markets { padding: 0.35rem 0; }
-        .dk-market { padding: 0.65rem 1rem; border-bottom: 1px solid var(--line); }
-        .dk-market:last-child { border-bottom: none; }
-        .dk-market-head { margin-bottom: 0.55rem; }
-        .dk-market-title { font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600; color: var(--paper); line-height: 1.3; }
-        .dk-market-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; margin-top: 0.15rem; }
-        .dk-odds-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.45rem; }
-        .dk-odds-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; min-height: 3.4rem; padding: 0.45rem 0.5rem; border-radius: 6px; border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: var(--paper); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-        .dk-odds-btn:hover:not(:disabled) { border-color: var(--gold); background: rgba(201, 162, 39, 0.08); }
-        .dk-odds-btn.selected { border-color: var(--gold); background: rgba(201, 162, 39, 0.15); box-shadow: inset 0 0 0 1px var(--gold); }
-        .dk-odds-btn:disabled { opacity: 0.35; cursor: default; }
-        .dk-odds-label { font-size: 0.72rem; font-weight: 600; text-align: center; line-height: 1.2; }
-        .dk-odds-sublabel { font-size: 0.62rem; color: #7ea08f; }
-        .dk-odds-value { font-family: 'IBM Plex Mono', monospace; font-size: 0.88rem; font-weight: 700; color: var(--gold-bright); margin-top: 0.1rem; }
-
-        .dk-betslip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; background: var(--felt-dark); border-top: 2px solid var(--line); box-shadow: 0 -8px 24px rgba(0,0,0,0.35); }
-        .dk-betslip-inner { max-width: 880px; margin: 0 auto; padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-        .dk-betslip-pick { flex: 1; min-width: 140px; }
-        .dk-betslip-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold-bright); }
-        .dk-betslip-title { font-size: 0.82rem; font-weight: 600; color: var(--paper); margin-top: 0.1rem; }
-        .dk-betslip-detail { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; }
-        .dk-betslip-actions { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
-        .dk-betslip-stake-wrap { display: flex; flex-direction: column; gap: 0.15rem; }
-        .dk-betslip-stake-wrap label { font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #7ea08f; text-transform: uppercase; }
-        .dk-betslip-stake { width: 4.5rem; padding: 0.4rem 0.45rem; border-radius: 4px; border: 1px solid #c9bb95; background: #fbf6ea; color: var(--ink); font-size: 0.85rem; font-weight: 600; }
-        .dk-betslip-payout { display: flex; flex-direction: column; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
-        .dk-betslip-payout strong { font-size: 0.95rem; color: var(--gold-bright); }
-        .dk-betslip-place { padding: 0.65rem 1.1rem; border-radius: 4px; border: none; background: var(--gold); color: #241d05; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
-        .dk-betslip-place:hover { background: var(--gold-bright); }
-        .dk-betslip-clear { padding: 0.45rem; border-radius: 4px; border: 1px solid var(--line); background: transparent; color: #7ea08f; cursor: pointer; display: flex; align-items: center; }
-
-        .dk-custom-builder { padding: 0.85rem 1rem 1rem; }
-        .dk-custom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.75rem; }
-        @media (max-width: 560px) { .dk-custom-row { grid-template-columns: 1fr; } }
-        .dk-custom-field label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #7ea08f; margin-bottom: 0.3rem; }
-        .dk-custom-field select { width: 100%; padding: 0.5rem 0.55rem; border-radius: 4px; border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: var(--paper); font-size: 0.82rem; }
-        .dk-player-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; }
-        .dk-player-chip { padding: 0.35rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,0.15); color: #c8ddd2; font-size: 0.72rem; cursor: pointer; }
-        .dk-player-chip.active { border-color: var(--gold); background: rgba(201, 162, 39, 0.15); color: var(--paper); font-weight: 600; }
-        .dk-custom-toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #a9c4b6; margin-bottom: 0.75rem; cursor: pointer; }
-        .dk-sport-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
-        .dk-sport-chip { padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: rgba(0,0,0,0.15); border: 1px solid var(--line); color: #a9c4b6; cursor: pointer; }
-        .dk-sport-chip.active { background: var(--gold); color: #241d05; border-color: var(--gold); }
-        .sb-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.75rem; }
-        .sb-matchup-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
-        .sb-matchup-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.75rem; align-items: stretch; margin-bottom: 1.25rem; }
-        .sb-matchup-team { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; }
-        .sb-matchup-team.you { border-color: var(--gold); }
-        .sb-matchup-team h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.03em; }
-        .sb-matchup-total { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; margin-bottom: 0.65rem; }
-        .sb-matchup-vs { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; color: #7ea08f; display: flex; align-items: center; justify-content: center; }
-        .sb-matchup-player { display: grid; grid-template-columns: 2.2rem 1fr auto auto; gap: 0.35rem 0.5rem; align-items: center; padding: 0.35rem 0.4rem; border-top: 1px solid rgba(63,102,87,0.45); font-size: 0.78rem; width: 100%; border-left: none; border-right: none; border-bottom: none; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; border-radius: 4px; transition: background 0.12s, outline 0.12s; }
-        .sb-matchup-player:first-of-type { border-top: none; }
-        .sb-matchup-player:hover { background: rgba(255,255,255,0.04); }
-        .sb-matchup-player.selected { background: rgba(201, 162, 39, 0.12); outline: 1px solid var(--gold); }
-        .sb-matchup-pos { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
-        .sb-matchup-name { font-weight: 500; }
-        .sb-matchup-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
-        .sb-matchup-proj { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #c9e8d4; min-width: 2.8rem; text-align: right; }
-        .sb-matchup-actual { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--gold-bright); min-width: 2.8rem; text-align: right; }
-        .sb-matchup-bets h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }
-      `}</style>
-
-      {!leagueReady && (
+      {!league.linked && (
         <div className="sb-setup">
           <div className="sb-setup-card">
             <h2>Link Your League</h2>
-            {members.length === 0 ? (
-              <>
-                <p>
-                  Connect your Sleeper league to pull in every manager automatically.
-                  Your league stays linked all season — bets, balances, and rosters are saved on this device.
-                </p>
-                <div className="sb-field" style={{ color: "var(--paper)" }}>
-                  <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 987654321012345678"
-                    value={league.inputId}
-                    onChange={(e) => setLeague((s) => ({ ...s, inputId: e.target.value, error: null }))}
-                    style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
-                  />
-                </div>
-                <p className="sb-note" style={{ marginTop: "-0.35rem" }}>
-                  Find it in the Sleeper app URL or league settings. No login required.
-                </p>
-                <div className="sb-form-actions">
-                  <button
-                    className="sb-btn sb-btn-submit"
-                    onClick={() => connectLeague(league.inputId)}
-                    disabled={league.loading || !league.inputId.trim()}
-                  >
-                    <Link2 size={12} /> {league.loading ? "Connecting…" : "Connect league"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p>
-                  <span className="sb-league-badge">Connected</span>
-                  {" "}{league.leagueName} &middot; {members.length} managers
-                </p>
-                <div className="sb-field" style={{ color: "var(--paper)" }}>
-                  <label style={{ color: "#a9c4b6" }}>Who are you?</label>
-                  <select
-                    className="sb-viewer-select"
-                    style={{ width: "100%", padding: "0.55rem 0.6rem" }}
-                    value={setupViewer}
-                    onChange={(e) => setSetupViewer(e.target.value)}
-                  >
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}{m.teamName ? ` (${m.displayName})` : ""}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="sb-setup-members">
-                  {members.map((m) => (
-                    <div className="sb-setup-member" key={m.id}>
-                      <Users size={14} color="#7ea08f" />
-                      <div>
-                        <div>{m.name}</div>
-                        {m.teamName && <span className="sub">{m.displayName}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="sb-form-actions">
-                  <button className="sb-btn sb-btn-submit" onClick={finishSetup} disabled={!setupViewer}>
-                    <Check size={12} /> Enter the book
-                  </button>
-                  <button
-                    className="sb-btn sb-btn-cancel"
-                    style={{ color: "#a9c4b6", borderColor: "var(--line)" }}
-                    onClick={() => { setMembers([]); setLeague((s) => ({ ...s, inputId: "", error: null })); }}
-                  >
-                    Back
-                  </button>
-                </div>
-              </>
-            )}
+            <p>
+              Connect your Sleeper league to pull in every manager automatically.
+              Your league is shared with everyone who joins it — bets and balances are the same for the whole group.
+            </p>
+            <div className="sb-field" style={{ color: "var(--paper)" }}>
+              <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
+              <input
+                type="text"
+                placeholder="e.g. 987654321012345678"
+                value={league.inputId}
+                onChange={(e) => setLeague((s) => ({ ...s, inputId: e.target.value, error: null }))}
+                style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
+              />
+            </div>
+            <p className="sb-note" style={{ marginTop: "-0.35rem" }}>
+              Find it in the Sleeper app URL or league settings.
+            </p>
+            <div className="sb-form-actions">
+              <button
+                className="sb-btn sb-btn-submit"
+                onClick={() => connectLeague(league.inputId)}
+                disabled={league.loading || !league.inputId.trim()}
+              >
+                <Link2 size={12} /> {league.loading ? "Connecting…" : "Connect league"}
+              </button>
+            </div>
             {league.error && (
               <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
                 <AlertTriangle size={12} /> {league.error}
@@ -2053,6 +1845,10 @@ export default function LeagueSportsbook() {
             )}
           </div>
         </div>
+      )}
+
+      {league.linked && !viewer && (
+        <ClaimManagerScreen leagueName={league.leagueName} members={members} onClaim={handleClaim} />
       )}
 
       {leagueReady && (
@@ -2071,9 +1867,7 @@ export default function LeagueSportsbook() {
           <div className="flex items-center gap-2">
             <Users size={14} color="#a9c4b6" />
             <span className="sb-marquee-sub" style={{ color: "#a9c4b6" }}>viewing as</span>
-            <select className="sb-viewer-select" value={viewer} onChange={(e) => setViewer(e.target.value)}>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+            <span className="sb-viewer-select">{nameOf(viewer)}</span>
           </div>
         </div>
       </div>
@@ -2639,7 +2433,7 @@ export default function LeagueSportsbook() {
                   <RefreshCw size={12} /> {league.loading ? "Syncing…" : "Refresh league"}
                 </button>
                 <button className="sb-btn sb-btn-decline" onClick={disconnectLeague}>
-                  Disconnect
+                  Sign out
                 </button>
               </div>
               {league.error && <div className="sb-error-banner"><AlertTriangle size={12} /> {league.error}</div>}
