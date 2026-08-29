@@ -94,6 +94,15 @@ function winProbFromSpread(spread) {
   return 1 / (1 + Math.exp(-spread / 7));
 }
 
+function liveStarters(member, weekData) {
+  const live = (weekData?.[member?.rosterId]?.starters || []).filter((id) => id && id !== "0");
+  return live.length ? live : (member?.starters || []);
+}
+
+function withLiveStarters(members, weekData) {
+  return members.map((m) => ({ ...m, starters: liveStarters(m, weekData) }));
+}
+
 function getWeekPairs(weekData, members) {
   const byMatchup = {};
   members.forEach((m) => {
@@ -1198,16 +1207,28 @@ export default function LeagueSportsbook({ session }) {
 
   const weeklyLedger = useMemo(() => computeLedger(bets, members, activeWeek), [bets, members, activeWeek]);
 
+  // Sleeper's per-week matchup data reflects a manager's current lineup even before kickoff,
+  // so prefer it over the roster snapshot taken at connect/refresh time — otherwise a lineup
+  // change in Sleeper wouldn't show up here until someone hits "Refresh league".
+  const activeWeekMembers = useMemo(
+    () => withLiveStarters(members, activeWeekData),
+    [members, activeWeekData],
+  );
+  const matchupWeekMembers = useMemo(
+    () => withLiveStarters(members, matchupWeekData),
+    [members, matchupWeekData],
+  );
+
   const boardOfferings = useMemo(
     () => generateBoardOfferings(
-      members,
+      activeWeekMembers,
       activeWeek,
       activeWeekData,
       players,
       activeProjections,
       league.scoringLabel,
     ),
-    [members, activeWeek, activeWeekData, players, activeProjections, league.scoringLabel],
+    [activeWeekMembers, activeWeek, activeWeekData, players, activeProjections, league.scoringLabel],
   );
 
   const boardNflTeams = useMemo(() => {
@@ -1232,16 +1253,16 @@ export default function LeagueSportsbook({ session }) {
   );
 
   const viewerMember = useMemo(
-    () => members.find((m) => m.id === viewer) || null,
-    [members, viewer],
+    () => matchupWeekMembers.find((m) => m.id === viewer) || null,
+    [matchupWeekMembers, viewer],
   );
 
   const matchupDataReady = !!weekCache[matchupWeek];
 
   const matchupOpponent = useMemo(() => {
     if (!matchupDataReady || !viewer) return null;
-    return getMatchupOpponent(viewer, members, matchupWeekData);
-  }, [matchupDataReady, viewer, members, matchupWeekData]);
+    return getMatchupOpponent(viewer, matchupWeekMembers, matchupWeekData);
+  }, [matchupDataReady, viewer, matchupWeekMembers, matchupWeekData]);
 
   const matchupOfferings = useMemo(() => {
     if (!viewerMember || !matchupOpponent || !matchupDataReady) return [];
@@ -1272,14 +1293,19 @@ export default function LeagueSportsbook({ session }) {
   const myLineupProj = viewerMember ? (sumLineupProjections(viewerMember, matchupProjections) ?? 0) : 0;
   const oppLineupProj = matchupOpponent ? (sumLineupProjections(matchupOpponent, matchupProjections) ?? 0) : 0;
 
+  const boardViewerMember = useMemo(
+    () => activeWeekMembers.find((m) => m.id === viewer) || null,
+    [activeWeekMembers, viewer],
+  );
+
   const myStarterPicks = useMemo(
-    () => starterPickOptions(viewerMember, players, activeProjections),
-    [viewerMember, players, activeProjections],
+    () => starterPickOptions(boardViewerMember, players, activeProjections),
+    [boardViewerMember, players, activeProjections],
   );
 
   const customOppMember = useMemo(
-    () => members.find((m) => m.id === customH2H.oppMemberId) || null,
-    [members, customH2H.oppMemberId],
+    () => activeWeekMembers.find((m) => m.id === customH2H.oppMemberId) || null,
+    [activeWeekMembers, customH2H.oppMemberId],
   );
 
   const myPlayerMeta = players[customH2H.myPlayerId];
