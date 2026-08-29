@@ -123,7 +123,19 @@ function getWeekPairs(weekData, members) {
 }
 
 const PLAYER_CACHE_KEY = "sleeper-players-pick-v1";
-const SLEEPER_PROJ_CACHE_KEY = "sleeper-proj-v2";
+const SLEEPER_PROJ_CACHE_KEY = "sleeper-proj-v3";
+
+function resolveProjectionSeason(nflState, leagueData) {
+  const nflSeason = Number(nflState?.league_season || nflState?.season);
+  const leagueSeason = Number(leagueData?.season);
+  const status = leagueData?.status || "";
+
+  if (status === "in_season" && leagueSeason) {
+    return leagueSeason;
+  }
+  if (nflSeason) return nflSeason;
+  return leagueSeason || new Date().getFullYear();
+}
 
 function getLeagueScoring(leagueData) {
   const rec = Number(leagueData?.scoring_settings?.rec ?? 1);
@@ -132,9 +144,49 @@ function getLeagueScoring(leagueData) {
   return { field: "pts_std", label: "Standard" };
 }
 
+const SCORING_META_KEY = /^(pos_limit_|playoff_|bench_|draft_|waiver_|trade_|daily_|disable_|num_|type_)/;
+
+function usesCustomScoring(scoringSettings) {
+  if (!scoringSettings) return false;
+  if (scoringSettings.pass_td != null && scoringSettings.pass_td !== 4) return true;
+  if (scoringSettings.pass_int != null && scoringSettings.pass_int !== -2) return true;
+  return Object.entries(scoringSettings).some(([key, weight]) => (
+    typeof weight === "number"
+    && weight !== 0
+    && (key.startsWith("bonus_") || key.startsWith("idp_") || key.startsWith("def_"))
+  ));
+}
+
+function calculateFantasyPts(stats, scoringSettings) {
+  if (!stats || !scoringSettings) return null;
+  let total = 0;
+  let used = false;
+  Object.entries(scoringSettings).forEach(([key, weight]) => {
+    if (SCORING_META_KEY.test(key)) return;
+    if (typeof weight !== "number" || !Number.isFinite(weight) || weight === 0) return;
+    const statVal = stats[key];
+    if (statVal == null || typeof statVal !== "number") return;
+    total += statVal * weight;
+    used = true;
+  });
+  if (!used) return null;
+  return Math.round(total * 100) / 100;
+}
+
+function projectionPointsFromSleeper(stats, scoringField, scoringSettings) {
+  if (!stats) return null;
+  if (usesCustomScoring(scoringSettings)) {
+    const custom = calculateFantasyPts(stats, scoringSettings);
+    if (custom != null) return custom;
+  }
+  if (stats[scoringField] != null) return Number(stats[scoringField]);
+  return calculateFantasyPts(stats, scoringSettings);
+}
+
 function formatProj(proj) {
   if (proj == null) return "—";
-  return (Math.round(proj * 10) / 10).toFixed(1);
+  const rounded = Math.round(proj * 100) / 100;
+  return Number.isInteger(rounded) ? rounded.toFixed(1) : rounded.toFixed(2);
 }
 
 function sleeperProj(playerId, projections) {
@@ -145,14 +197,24 @@ function sleeperProj(playerId, projections) {
 
 function betLineFromProj(proj) {
   if (proj == null) return null;
-  return Math.round(proj * 10) / 10;
+  return Math.round(proj * 100) / 100;
 }
 
-async function fetchSleeperProjections(week, season, playerIds, seasonType = "regular", scoringField = "pts_ppr") {
+async function fetchSleeperProjections(
+  week,
+  season,
+  playerIds,
+  seasonType = "regular",
+  scoringField = "pts_ppr",
+  scoringSettings = null,
+) {
   const ids = [...new Set(playerIds.filter(Boolean))];
   if (!ids.length) return {};
 
-  const cacheKey = `${season}-${week}-${seasonType}-${scoringField}`;
+  const scoringKey = scoringSettings
+    ? Object.entries(scoringSettings).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}:${v}`).join("|")
+    : scoringField;
+  const cacheKey = `${season}-${week}-${seasonType}-${scoringKey}`;
   let cache = {};
   try {
     cache = JSON.parse(localStorage.getItem(SLEEPER_PROJ_CACHE_KEY) || "{}");
@@ -163,36 +225,17 @@ async function fetchSleeperProjections(week, season, playerIds, seasonType = "re
   const missing = ids.filter((id) => weekCache[id] == null);
 
   if (missing.length) {
-    const positions = ["QB", "RB", "WR", "TE", "K", "DEF", "FLEX"];
-    const responses = await Promise.all(
-      positions.map((pos) => fetch(
-        `https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}&position[]=${pos}`,
-      ).catch(() => null)),
+    const res = await fetch(
+      `https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}`,
     );
+    if (!res.ok) throw new Error("sleeper projections");
+    const rows = await res.json();
     const byPlayer = {};
-    for (const res of responses) {
-      if (!res?.ok) continue;
-      const rows = await res.json();
-      (rows || []).forEach((row) => {
-        const pts = row?.stats?.[scoringField];
-        if (row?.player_id != null && pts != null) {
-          byPlayer[String(row.player_id)] = Number(pts);
-        }
-      });
-    }
-    if (!Object.keys(byPlayer).length) {
-      const res = await fetch(
-        `https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}`,
-      );
-      if (!res.ok) throw new Error("sleeper projections");
-      const rows = await res.json();
-      (rows || []).forEach((row) => {
-        const pts = row?.stats?.[scoringField];
-        if (row?.player_id != null && pts != null) {
-          byPlayer[String(row.player_id)] = Number(pts);
-        }
-      });
-    }
+    (rows || []).forEach((row) => {
+      if (row?.player_id == null || !row?.stats) return;
+      const pts = projectionPointsFromSleeper(row.stats, scoringField, scoringSettings);
+      if (pts != null) byPlayer[String(row.player_id)] = pts;
+    });
     ids.forEach((id) => {
       const pts = byPlayer[String(id)];
       if (pts != null) weekCache[id] = pts;
@@ -707,6 +750,7 @@ export default function LeagueSportsbook() {
     nflSeasonType: stored?.nflSeasonType || "regular",
     scoringField: stored?.scoringField || "pts_ppr",
     scoringLabel: stored?.scoringLabel || "PPR",
+    projectionSeason: stored?.projectionSeason || stored?.season || new Date().getFullYear(),
     inputId: stored?.leagueId || "",
   });
   const [members, setMembers] = useState(stored?.members || []);
@@ -770,8 +814,9 @@ export default function LeagueSportsbook() {
       nflSeasonType: league.nflSeasonType,
       scoringField: league.scoringField,
       scoringLabel: league.scoringLabel,
+      projectionSeason: league.projectionSeason,
     });
-  }, [league.linked, league.leagueId, league.leagueName, league.week, league.season, league.nflSeasonType, league.scoringField, league.scoringLabel, members, viewer, bets, ticketSeq, selectedWeek]);
+  }, [league.linked, league.leagueId, league.leagueName, league.week, league.season, league.nflSeasonType, league.scoringField, league.scoringLabel, league.projectionSeason, members, viewer, bets, ticketSeq, selectedWeek]);
 
   useEffect(() => {
     if (defaultOpponent && !members.some((m) => m.id === form.opponent && m.id !== viewer)) {
@@ -797,11 +842,13 @@ export default function LeagueSportsbook() {
     if (builtMembers.length === 0) throw new Error("empty");
     const schedule = resolveRegularSeasonSchedule(nflState, leagueData);
     const scoring = getLeagueScoring(leagueData);
+    const projectionSeason = resolveProjectionSeason(nflState, leagueData);
     return {
       leagueName: leagueData.name || "Your League",
       members: builtMembers,
       week: schedule.currentWeek,
       season: schedule.season,
+      projectionSeason,
       nflSeasonType: schedule.nflSeasonType,
       scoringField: scoring.field,
       scoringLabel: scoring.label,
@@ -821,6 +868,7 @@ export default function LeagueSportsbook() {
         leagueName: data.leagueName,
         week: data.week,
         season: data.season,
+        projectionSeason: data.projectionSeason,
         nflSeasonType: data.nflSeasonType,
         scoringField: data.scoringField,
         scoringLabel: data.scoringLabel,
@@ -858,6 +906,7 @@ export default function LeagueSportsbook() {
         leagueName: data.leagueName,
         week: data.week,
         season: data.season,
+        projectionSeason: data.projectionSeason,
         nflSeasonType: data.nflSeasonType,
         scoringField: data.scoringField,
         scoringLabel: data.scoringLabel,
@@ -888,6 +937,7 @@ export default function LeagueSportsbook() {
       nflSeasonType: "regular",
       scoringField: "pts_ppr",
       scoringLabel: "PPR",
+      projectionSeason: new Date().getFullYear(),
       inputId: "",
     });
     setMembers([]);
@@ -953,7 +1003,7 @@ export default function LeagueSportsbook() {
       const leagueData = leagueRes.ok ? await leagueRes.json() : null;
       const schedule = resolveRegularSeasonSchedule(nflState, leagueData);
       const scoring = getLeagueScoring(leagueData);
-      const season = Number(leagueData?.season) || schedule.season;
+      const projectionSeason = resolveProjectionSeason(nflState, leagueData);
       const map = {};
       current.forEach((row) => { map[row.roster_id] = row; });
 
@@ -966,10 +1016,11 @@ export default function LeagueSportsbook() {
       const playerInfo = await fetchPlayerInfo(starterIds);
       const projections = await fetchSleeperProjections(
         wk,
-        season,
+        projectionSeason,
         starterIds,
         "regular",
         scoring.field,
+        leagueData?.scoring_settings || null,
       );
 
       const entry = { matchups: map, projections };
@@ -979,7 +1030,8 @@ export default function LeagueSportsbook() {
       setLeague((s) => ({
         ...s,
         loading: showSpinner ? false : s.loading,
-        season,
+        season: Number(leagueData?.season) || schedule.season,
+        projectionSeason,
         week: schedule.currentWeek,
         nflSeasonType: schedule.nflSeasonType,
         scoringField: scoring.field,
@@ -1073,7 +1125,7 @@ export default function LeagueSportsbook() {
   useEffect(() => {
     weekCacheRef.current = {};
     setWeekCache({});
-  }, [league.scoringField, league.season]);
+  }, [league.scoringField, league.season, league.projectionSeason]);
 
   useEffect(() => {
     if (!leagueReady || !league.leagueId) return;
@@ -2010,8 +2062,9 @@ export default function LeagueSportsbook() {
           <div>
             <div className="sb-marquee-title sb-display">League Sportsbook</div>
             <div className="sb-marquee-sub">
-              {league.leagueName} · {league.season} Regular Season · Week {currentWeek}
+              {league.leagueName} · {league.projectionSeason} NFL · Week {currentWeek}
               {league.nflSeasonType && league.nflSeasonType !== "regular" ? ` · NFL ${league.nflSeasonType}` : ""}
+              {" · "}{league.scoringLabel}
               {" · "}{BUILD_STAMP}
             </div>
           </div>
@@ -2133,7 +2186,7 @@ export default function LeagueSportsbook() {
             )}
 
             <p className="sb-note" style={{ marginBottom: "0.85rem", color: "#7ea08f" }}>
-              Tap a line to add it to your bet slip. Lines use Sleeper&rsquo;s {league.scoringLabel} projections.
+              Tap a line to add it to your bet slip. Projections are from Sleeper ({league.projectionSeason} week {activeWeek}, {league.scoringLabel} scoring).
             </p>
 
             <div className="dk-sport-chips">
