@@ -1,0 +1,2809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>League Sportsbook</title>
+  <!-- build: 2026-08-29T02:10:23.935Z -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body, #root { margin: 0; min-height: 100%; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .flex-wrap { flex-wrap: wrap; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-3 { gap: 0.75rem; }
+  </style>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <script>
+const {
+  useState,
+  useMemo,
+  useEffect,
+  useCallback
+} = React;
+function Icon({
+  children,
+  size = 16,
+  color = "currentColor",
+  style
+}) {
+  return React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: color,
+    strokeWidth: 2,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style
+  }, children);
+}
+const Check = p => React.createElement(Icon, p, React.createElement("polyline", {
+  points: "20 6 9 17 4 12"
+}));
+const X = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M18 6 6 18"
+}), React.createElement("path", {
+  d: "m6 6 12 12"
+}));
+const Lock = p => React.createElement(Icon, p, React.createElement("rect", {
+  width: 18,
+  height: 11,
+  x: 3,
+  y: 11,
+  rx: 2,
+  ry: 2
+}), React.createElement("path", {
+  d: "M7 11V7a5 5 0 0 1 10 0v4"
+}));
+const Trophy = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M6 9H4.5a2.5 2.5 0 0 1 0-5H6"
+}), React.createElement("path", {
+  d: "M18 9h1.5a2.5 2.5 0 0 0 0-5H18"
+}), React.createElement("path", {
+  d: "M4 22h16"
+}), React.createElement("path", {
+  d: "M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20 7 22"
+}), React.createElement("path", {
+  d: "M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20 17 22"
+}), React.createElement("path", {
+  d: "M18 2H6v7a6 6 0 0 0 12 0V2Z"
+}));
+const Plus = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M5 12h14"
+}), React.createElement("path", {
+  d: "M12 5v14"
+}));
+const ChevronLeft = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "m15 18-6-6 6-6"
+}));
+const ChevronRight = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "m9 18 6-6-6-6"
+}));
+const Users = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"
+}), React.createElement("circle", {
+  cx: 9,
+  cy: 7,
+  r: 4
+}), React.createElement("path", {
+  d: "M22 21v-2a4 4 0 0 0-3-3.87"
+}), React.createElement("path", {
+  d: "M16 3.13a4 4 0 0 1 0 7.75"
+}));
+const ScrollText = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M15 12h-5"
+}), React.createElement("path", {
+  d: "M15 8h-5"
+}), React.createElement("path", {
+  d: "M19 17V5a2 2 0 0 0-2-2H4"
+}), React.createElement("path", {
+  d: "M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"
+}));
+const Zap = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+}));
+const RefreshCw = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"
+}), React.createElement("path", {
+  d: "M21 3v5h-5"
+}), React.createElement("path", {
+  d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"
+}), React.createElement("path", {
+  d: "M8 16H3v5"
+}));
+const Link2 = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M9 17H7A5 5 0 0 1 7 7h2"
+}), React.createElement("path", {
+  d: "M15 7h2a5 5 0 1 1 0 10h-2"
+}), React.createElement("line", {
+  x1: 8,
+  x2: 16,
+  y1: 12,
+  y2: 12
+}));
+const AlertTriangle = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"
+}), React.createElement("path", {
+  d: "M12 9v4"
+}), React.createElement("path", {
+  d: "M12 17h.01"
+}));
+const CalendarDays = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M8 2v4"
+}), React.createElement("path", {
+  d: "M16 2v4"
+}), React.createElement("rect", {
+  width: 18,
+  height: 18,
+  x: 3,
+  y: 4,
+  rx: 2
+}), React.createElement("path", {
+  d: "M3 10h18"
+}), React.createElement("path", {
+  d: "M8 14h.01"
+}), React.createElement("path", {
+  d: "M12 14h.01"
+}), React.createElement("path", {
+  d: "M16 14h.01"
+}), React.createElement("path", {
+  d: "M8 18h.01"
+}), React.createElement("path", {
+  d: "M12 18h.01"
+}), React.createElement("path", {
+  d: "M16 18h.01"
+}));
+const TrendingUp = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "M16 7h6v6"
+}), React.createElement("path", {
+  d: "m22 7-8.5 8.5-5-5L2 17"
+}));
+const Swords = p => React.createElement(Icon, p, React.createElement("path", {
+  d: "m14.5 17.5 3 3"
+}), React.createElement("path", {
+  d: "m11 13-6 6"
+}), React.createElement("path", {
+  d: "m21 3-2.5 2.5"
+}), React.createElement("path", {
+  d: "M3 21 8 16"
+}), React.createElement("path", {
+  d: "m14 4 6 6"
+}), React.createElement("path", {
+  d: "m9.5 6.5 2 2"
+}));
+const STORAGE_KEY = "league-book-v1";
+const BUILD_STAMP = "2026-08-29 02:10";
+const REGULAR_SEASON_WEEKS = 18;
+function resolveRegularSeasonSchedule(nflState, leagueData) {
+  const season = Number(leagueData?.season || nflState?.league_season || nflState?.season || new Date().getFullYear());
+  const nflType = nflState?.season_type || "regular";
+  const leg = Number(leagueData?.settings?.leg) || 0;
+  const status = leagueData?.status || "";
+  let currentWeek = 1;
+  if (status === "in_season" && leg >= 1) {
+    currentWeek = Math.min(REGULAR_SEASON_WEEKS, leg);
+  } else if (nflType === "regular") {
+    currentWeek = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(nflState?.week) || 1));
+  } else if (nflType === "post") {
+    currentWeek = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(nflState?.week) || REGULAR_SEASON_WEEKS));
+  }
+  return {
+    season,
+    currentWeek,
+    nflSeasonType: nflType,
+    isRegularSeason: nflType === "regular" || status === "in_season" && leg >= 1
+  };
+}
+function clampWeekToSeason(week, currentWeek) {
+  const w = Number(week);
+  if (!Number.isFinite(w) || w < 1) return currentWeek;
+  return Math.min(currentWeek, Math.max(1, w));
+}
+function loadStored() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function saveStored(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // ignore quota errors
+  }
+}
+function buildMembers(rosters, users) {
+  const userMap = Object.fromEntries(users.map(u => [u.user_id, u]));
+  return rosters.filter(r => r.owner_id).map(r => {
+    const user = userMap[r.owner_id] || {};
+    const teamName = user.metadata?.team_name;
+    const displayName = user.display_name || `Manager ${r.roster_id}`;
+    const wins = r.settings?.wins || 0;
+    const losses = r.settings?.losses || 0;
+    const ties = r.settings?.ties || 0;
+    const gamesPlayed = wins + losses + ties;
+    return {
+      id: String(r.owner_id),
+      rosterId: String(r.roster_id),
+      name: teamName || displayName,
+      displayName,
+      teamName: teamName || null,
+      seasonPts: r.settings?.fpts || 0,
+      wins,
+      losses,
+      gamesPlayed,
+      starters: (r.starters || []).filter(id => id && id !== "0")
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+function americanOdds(prob) {
+  const p = Math.min(0.92, Math.max(0.08, prob));
+  if (p >= 0.5) return Math.round(-100 * p / (1 - p));
+  return Math.round(100 * (1 - p) / p);
+}
+function formatOdds(odds) {
+  return odds > 0 ? `+${odds}` : `${odds}`;
+}
+function payoutFromOdds(stake, odds) {
+  if (odds > 0) return Math.round(stake * odds / 100);
+  return Math.round(stake * 100 / Math.abs(odds));
+}
+function winProbFromSpread(spread) {
+  return 1 / (1 + Math.exp(-spread / 7));
+}
+function getWeekPairs(weekData, members) {
+  const byMatchup = {};
+  members.forEach(m => {
+    const row = weekData[m.rosterId];
+    if (!row?.matchup_id) return;
+    if (!byMatchup[row.matchup_id]) byMatchup[row.matchup_id] = [];
+    byMatchup[row.matchup_id].push(m);
+  });
+  const pairs = [];
+  Object.values(byMatchup).forEach(group => {
+    if (group.length === 2) pairs.push(group);
+  });
+  return pairs;
+}
+const PLAYER_CACHE_KEY = "sleeper-players-pick-v1";
+const SLEEPER_PROJ_CACHE_KEY = "sleeper-proj-ppr-v1";
+const POS_LINE = {
+  QB: 18.5,
+  RB: 12.5,
+  WR: 11.5,
+  TE: 8.5,
+  K: 8,
+  DEF: 7.5,
+  FLEX: 10.5
+};
+function formatProj(proj) {
+  if (proj == null) return "—";
+  return (Math.round(proj * 10) / 10).toFixed(1);
+}
+async function fetchSleeperProjections(week, season, playerIds, seasonType = "regular") {
+  const ids = [...new Set(playerIds.filter(Boolean))];
+  if (!ids.length) return {};
+  const cacheKey = `${season}-${week}-${seasonType}-ppr`;
+  let cache = {};
+  try {
+    cache = JSON.parse(localStorage.getItem(SLEEPER_PROJ_CACHE_KEY) || "{}");
+  } catch {
+    cache = {};
+  }
+  const weekCache = {
+    ...(cache[cacheKey] || {})
+  };
+  const missing = ids.filter(id => weekCache[id] == null);
+  if (missing.length) {
+    const res = await fetch(`https://api.sleeper.app/projections/nfl/${season}/${week}?season_type=${seasonType}`);
+    if (!res.ok) throw new Error("sleeper projections");
+    const rows = await res.json();
+    const byPlayer = {};
+    (rows || []).forEach(row => {
+      const pts = row?.stats?.pts_ppr;
+      if (row?.player_id != null && pts != null) {
+        byPlayer[String(row.player_id)] = pts;
+      }
+    });
+    ids.forEach(id => {
+      const pts = byPlayer[String(id)];
+      if (pts != null) weekCache[id] = pts;
+    });
+    cache[cacheKey] = weekCache;
+    try {
+      localStorage.setItem(SLEEPER_PROJ_CACHE_KEY, JSON.stringify(cache));
+    } catch {
+      // quota — in-memory only
+    }
+  }
+  return weekCache;
+}
+function defaultLine(position) {
+  return POS_LINE[position] || 10.5;
+}
+function playerLabel(players, playerId) {
+  return players[playerId]?.name || `Player ${playerId}`;
+}
+function findStarterByPos(member, players, pos) {
+  return (member.starters || []).find(pid => players[pid]?.position === pos);
+}
+function getFeaturedStarters(member, players) {
+  const starters = member.starters || [];
+  const featured = [];
+  ["QB", "RB", "WR", "TE"].forEach(pos => {
+    const pid = starters.find(id => players[id]?.position === pos);
+    if (pid) featured.push(pid);
+  });
+  if (featured.length < 3) {
+    starters.forEach(pid => {
+      if (featured.length >= 4) return;
+      if (!featured.includes(pid) && players[pid]) featured.push(pid);
+    });
+  }
+  return featured.slice(0, 4);
+}
+function lineForPlayer(playerId, players, projections) {
+  const proj = projections[playerId];
+  if (proj != null) return Math.round(proj * 2) / 2;
+  return defaultLine(players[playerId]?.position);
+}
+function sumLineupLine(member, players, projections) {
+  return Math.round((member.starters || []).reduce((sum, pid) => sum + lineForPlayer(pid, players, projections), 0) * 2) / 2;
+}
+function lineupFantasyPts(weekData, rosterId, starters) {
+  const row = weekData[rosterId];
+  if (!row?.players_points) return null;
+  return (starters || []).reduce((sum, pid) => sum + (row.players_points[pid] || 0), 0);
+}
+function getPlayerPts(weekData, members, playerId) {
+  for (const m of members) {
+    const row = weekData[m.rosterId];
+    if (row?.players_points && playerId in row.players_points) {
+      return row.players_points[playerId];
+    }
+  }
+  return null;
+}
+async function fetchPlayerInfo(playerIds) {
+  const unique = [...new Set(playerIds.filter(Boolean))];
+  let cached = {};
+  try {
+    cached = JSON.parse(localStorage.getItem(PLAYER_CACHE_KEY) || "{}");
+  } catch {
+    cached = {};
+  }
+  const missing = unique.filter(id => !cached[id]);
+  if (missing.length > 0) {
+    const res = await fetch("https://api.sleeper.app/v1/players/nfl");
+    if (!res.ok) throw new Error("players");
+    const all = await res.json();
+    unique.forEach(id => {
+      const p = all[id];
+      if (p) {
+        cached[id] = {
+          name: p.full_name || `${p.first_name || ""} ${p.last_name || ""}`.trim(),
+          position: p.position || "?",
+          team: p.team || null
+        };
+      }
+    });
+    try {
+      localStorage.setItem(PLAYER_CACHE_KEY, JSON.stringify(cached));
+    } catch {
+      // quota — in-memory only
+    }
+  }
+  return cached;
+}
+function generateBoardOfferings(members, week, weekData, players, projections) {
+  if (!members.length || !Object.keys(players).length) return [];
+  const offerings = [];
+  const pairs = Object.keys(weekData).length > 0 ? getWeekPairs(weekData, members) : [];
+  members.forEach(m => {
+    getFeaturedStarters(m, players).forEach(pid => {
+      const p = players[pid];
+      if (!p) return;
+      const line = lineForPlayer(pid, players, projections);
+      const rawProj = projections[pid];
+      offerings.push({
+        id: `pou-${week}-${pid}`,
+        kind: "player_ou",
+        category: "props",
+        type: "prop",
+        week,
+        title: `${p.name} O/U ${line} fantasy pts`,
+        subtitle: `${m.name} · ${p.position}${p.team ? ` · ${p.team}` : ""} · Sleeper PPR proj ${formatProj(rawProj)}`,
+        playerId: pid,
+        ownerId: m.id,
+        fantasyTeamId: m.id,
+        position: p.position,
+        nflTeam: p.team || null,
+        line,
+        sides: [{
+          key: "over",
+          label: `Over ${line}`,
+          odds: -110,
+          pick: "over"
+        }, {
+          key: "under",
+          label: `Under ${line}`,
+          odds: -110,
+          pick: "under"
+        }]
+      });
+    });
+  });
+  members.forEach(m => {
+    if (!m.starters?.length) return;
+    const line = sumLineupLine(m, players, projections);
+    offerings.push({
+      id: `lineup-${week}-${m.id}`,
+      kind: "lineup_ou",
+      category: "lineups",
+      type: "prop",
+      week,
+      title: `${m.name} lineup O/U ${line} fantasy pts`,
+      subtitle: `Week ${week} · Sleeper PPR starter projections`,
+      subjectId: m.id,
+      fantasyTeamId: m.id,
+      line,
+      sides: [{
+        key: "over",
+        label: `Over ${line}`,
+        odds: -115,
+        pick: "over"
+      }, {
+        key: "under",
+        label: `Under ${line}`,
+        odds: -105,
+        pick: "under"
+      }]
+    });
+  });
+  pairs.forEach(([a, b]) => {
+    const projA = sumLineupLine(a, players, projections);
+    const projB = sumLineupLine(b, players, projections);
+    const spread = Math.round((projA - projB) * 2) / 2;
+    const probA = winProbFromSpread(spread);
+    offerings.push({
+      id: `lineup-ml-${week}-${a.id}-${b.id}`,
+      kind: "lineup_ml",
+      category: "matchups",
+      type: "matchup",
+      week,
+      title: `${a.name} vs ${b.name} — lineup pts`,
+      subtitle: `Week ${week} · Sleeper PPR proj ${projA} vs ${projB}`,
+      memberA: a.id,
+      memberB: b.id,
+      fantasyTeamIds: [a.id, b.id],
+      sides: [{
+        key: "a",
+        memberId: a.id,
+        label: a.name,
+        odds: americanOdds(probA)
+      }, {
+        key: "b",
+        memberId: b.id,
+        label: b.name,
+        odds: americanOdds(1 - probA)
+      }]
+    });
+    const matchups = [{
+      pos: "QB",
+      label: "QB"
+    }, {
+      pos: "RB",
+      label: "RB"
+    }, {
+      pos: "WR",
+      label: "WR"
+    }];
+    matchups.forEach(({
+      pos,
+      label
+    }) => {
+      const pidA = findStarterByPos(a, players, pos);
+      const pidB = findStarterByPos(b, players, pos);
+      if (!pidA || !pidB) return;
+      const lineA = lineForPlayer(pidA, players, projections);
+      const lineB = lineForPlayer(pidB, players, projections);
+      const prob = winProbFromSpread(lineA - lineB);
+      offerings.push({
+        id: `ph2h-${week}-${pidA}-${pidB}`,
+        kind: "player_h2h",
+        category: "matchups",
+        type: "prop",
+        week,
+        title: `${playerLabel(players, pidA)} vs ${playerLabel(players, pidB)}`,
+        subtitle: `Week ${week} · ${label} H2H · Sleeper PPR ${lineA} vs ${lineB}`,
+        playerIdA: pidA,
+        playerIdB: pidB,
+        memberA: a.id,
+        memberB: b.id,
+        fantasyTeamIds: [a.id, b.id],
+        position: pos,
+        sides: [{
+          key: "a",
+          playerId: pidA,
+          memberId: a.id,
+          label: playerLabel(players, pidA),
+          odds: americanOdds(prob)
+        }, {
+          key: "b",
+          playerId: pidB,
+          memberId: b.id,
+          label: playerLabel(players, pidB),
+          odds: americanOdds(1 - prob)
+        }]
+      });
+    });
+  });
+  return offerings;
+}
+function getMatchupOpponent(viewerId, members, weekData) {
+  const pairs = getWeekPairs(weekData, members);
+  const pair = pairs.find(([a, b]) => a.id === viewerId || b.id === viewerId);
+  if (!pair) return null;
+  return pair[0].id === viewerId ? pair[1] : pair[0];
+}
+function buildMatchupOfferings(me, opp, week, players, projections) {
+  if (!me || !opp) return [];
+  const offerings = [];
+  const projMe = sumLineupLine(me, players, projections);
+  const projOpp = sumLineupLine(opp, players, projections);
+  const spread = Math.round((projMe - projOpp) * 2) / 2;
+  const probMe = winProbFromSpread(spread);
+  offerings.push({
+    id: `lineup-ml-${week}-${me.id}-${opp.id}`,
+    kind: "lineup_ml",
+    type: "matchup",
+    week,
+    title: `${me.name} vs ${opp.name} — lineup pts`,
+    subtitle: `Week ${week} · Sleeper PPR proj ${projMe} vs ${projOpp}`,
+    memberA: me.id,
+    memberB: opp.id,
+    counterpartyId: opp.id,
+    sides: [{
+      key: "a",
+      memberId: me.id,
+      label: `${me.name} (${projMe})`,
+      odds: americanOdds(probMe)
+    }, {
+      key: "b",
+      memberId: opp.id,
+      label: `${opp.name} (${projOpp})`,
+      odds: americanOdds(1 - probMe)
+    }]
+  });
+  ["QB", "RB", "WR", "TE"].forEach(pos => {
+    const pidMe = findStarterByPos(me, players, pos);
+    const pidOpp = findStarterByPos(opp, players, pos);
+    if (!pidMe || !pidOpp) return;
+    const lineMe = lineForPlayer(pidMe, players, projections);
+    const lineOpp = lineForPlayer(pidOpp, players, projections);
+    const prob = winProbFromSpread(lineMe - lineOpp);
+    offerings.push({
+      id: `ph2h-${week}-${pidMe}-${pidOpp}`,
+      kind: "player_h2h",
+      type: "prop",
+      week,
+      title: `${playerLabel(players, pidMe)} vs ${playerLabel(players, pidOpp)}`,
+      subtitle: `Week ${week} · ${pos} H2H · Upcoming PPR ${lineMe} vs ${lineOpp}`,
+      playerIdA: pidMe,
+      playerIdB: pidOpp,
+      memberA: me.id,
+      memberB: opp.id,
+      counterpartyId: opp.id,
+      position: pos,
+      sides: [{
+        key: "a",
+        playerId: pidMe,
+        memberId: me.id,
+        label: playerLabel(players, pidMe),
+        odds: americanOdds(prob)
+      }, {
+        key: "b",
+        playerId: pidOpp,
+        memberId: opp.id,
+        label: playerLabel(players, pidOpp),
+        odds: americanOdds(1 - prob)
+      }]
+    });
+  });
+  [me, opp].forEach(member => {
+    getFeaturedStarters(member, players).forEach(pid => {
+      const p = players[pid];
+      if (!p) return;
+      const line = lineForPlayer(pid, players, projections);
+      const rawProj = projections[pid];
+      const counterparty = member.id === me.id ? opp.id : me.id;
+      offerings.push({
+        id: `pou-${week}-${pid}`,
+        kind: "player_ou",
+        type: "prop",
+        week,
+        title: `${p.name} O/U ${line} fantasy pts`,
+        subtitle: `${member.name} · Sleeper PPR proj ${formatProj(rawProj)}`,
+        playerId: pid,
+        ownerId: member.id,
+        counterpartyId: counterparty,
+        line,
+        sides: [{
+          key: "over",
+          label: `Over ${line}`,
+          odds: -110,
+          pick: "over"
+        }, {
+          key: "under",
+          label: `Under ${line}`,
+          odds: -110,
+          pick: "under"
+        }]
+      });
+    });
+  });
+  return offerings;
+}
+function starterRows(member, players, projections, weekData) {
+  return (member?.starters || []).map(pid => {
+    const p = players[pid] || {
+      name: `Player ${pid}`,
+      position: "?",
+      team: null
+    };
+    const row = weekData[member.rosterId];
+    const actual = row?.players_points?.[pid];
+    return {
+      pid,
+      name: p.name,
+      position: p.position,
+      team: p.team,
+      proj: projections[pid] ?? null,
+      actual: actual != null ? actual : null
+    };
+  });
+}
+function buildCustomH2hOffering(viewerId, myPlayerId, oppMemberId, oppPlayerId, week, players, projections, members) {
+  if (!viewerId || !myPlayerId || !oppMemberId || !oppPlayerId || oppMemberId === viewerId) return null;
+  const opp = members.find(m => m.id === oppMemberId);
+  const myP = players[myPlayerId];
+  const oppP = players[oppPlayerId];
+  if (!myP || !oppP) return null;
+  const lineA = lineForPlayer(myPlayerId, players, projections);
+  const lineB = lineForPlayer(oppPlayerId, players, projections);
+  const prob = winProbFromSpread(lineA - lineB);
+  return {
+    id: `custom-h2h-${week}-${myPlayerId}-${oppPlayerId}`,
+    kind: "player_h2h",
+    type: "prop",
+    week,
+    title: `${myP.name} vs ${oppP.name}`,
+    subtitle: `Player battle · ${opp?.name || "Opponent"} · Week ${week}`,
+    playerIdA: myPlayerId,
+    playerIdB: oppPlayerId,
+    memberA: viewerId,
+    memberB: oppMemberId,
+    counterpartyId: oppMemberId,
+    custom: true,
+    sides: [{
+      key: "a",
+      playerId: myPlayerId,
+      memberId: viewerId,
+      label: myP.name,
+      sublabel: `${myP.position} · ${formatProj(projections[myPlayerId])} proj`,
+      odds: americanOdds(prob)
+    }, {
+      key: "b",
+      playerId: oppPlayerId,
+      memberId: oppMemberId,
+      label: oppP.name,
+      sublabel: `${oppP.position} · ${formatProj(projections[oppPlayerId])} proj`,
+      odds: americanOdds(1 - prob)
+    }]
+  };
+}
+function starterPickOptions(member, players, projections, positionFilter = "all") {
+  return (member?.starters || []).filter(pid => {
+    if (!players[pid]) return false;
+    if (positionFilter === "all") return true;
+    return players[pid].position === positionFilter;
+  }).map(pid => {
+    const p = players[pid];
+    return {
+      id: pid,
+      name: p.name,
+      position: p.position,
+      team: p.team,
+      proj: projections[pid] ?? null
+    };
+  });
+}
+function groupBoardEvents(offerings, members) {
+  const events = [];
+  const teamMap = {};
+  offerings.filter(o => o.kind === "player_ou").forEach(o => {
+    const tid = o.fantasyTeamId || o.ownerId || "other";
+    if (!teamMap[tid]) teamMap[tid] = [];
+    teamMap[tid].push(o);
+  });
+  Object.entries(teamMap).forEach(([tid, markets]) => {
+    const team = members.find(m => m.id === tid);
+    events.push({
+      id: `team-${tid}`,
+      title: team?.name || "Team",
+      subtitle: "Player fantasy points · PPR",
+      markets
+    });
+  });
+  const lineups = offerings.filter(o => o.kind === "lineup_ou");
+  if (lineups.length) {
+    events.push({
+      id: "lineups",
+      title: "Lineup Totals",
+      subtitle: "Combined starter projections",
+      markets: lineups
+    });
+  }
+  const matchups = offerings.filter(o => o.kind === "lineup_ml" || o.kind === "player_h2h");
+  if (matchups.length) {
+    events.push({
+      id: "matchups",
+      title: "Head-to-Head Markets",
+      subtitle: "Lineup & position battles",
+      markets: matchups
+    });
+  }
+  return events;
+}
+function filterBoardOfferings(offerings, {
+  category,
+  fantasyTeam,
+  position,
+  nflTeam
+}) {
+  if (category === "battles") return [];
+  return offerings.filter(o => {
+    if (category !== "all" && o.category !== category) return false;
+    if (fantasyTeam !== "all") {
+      const ids = o.fantasyTeamIds || (o.fantasyTeamId ? [o.fantasyTeamId] : []);
+      if (!ids.includes(fantasyTeam)) return false;
+    }
+    if (position !== "all") {
+      if (!o.position || o.position !== position) return false;
+    }
+    if (nflTeam !== "all") {
+      if (!o.nflTeam || o.nflTeam !== nflTeam) return false;
+    }
+    return true;
+  });
+}
+const TYPE_LABEL = {
+  matchup: "Matchup",
+  prop: "Player Prop",
+  season: "Season Future",
+  proposition: "League Prop"
+};
+const AUTO_GRADABLE = {
+  matchup: true,
+  prop: true,
+  season: false,
+  proposition: false
+};
+function computeLedger(betList, members, weekFilter = null) {
+  const net = {};
+  members.forEach(m => net[m.id] = {});
+  const settled = betList.filter(b => {
+    if (b.status !== "settled" || !b.result) return false;
+    if (weekFilter === null) return true;
+    return Number(b.week) === weekFilter;
+  });
+  settled.forEach(b => {
+    const winner = b.result === "creator" ? b.creator : b.opponent;
+    const loser = b.result === "creator" ? b.opponent : b.creator;
+    net[loser][winner] = (net[loser][winner] || 0) + b.stake;
+  });
+  const pairs = [];
+  members.forEach((a, i) => {
+    members.forEach((b, j) => {
+      if (i >= j) return;
+      const diff = (net[a.id][b.id] || 0) - (net[b.id][a.id] || 0);
+      if (diff !== 0) {
+        pairs.push({
+          from: diff > 0 ? a.id : b.id,
+          to: diff > 0 ? b.id : a.id,
+          amount: Math.abs(diff)
+        });
+      }
+    });
+  });
+  const totals = {};
+  members.forEach(m => totals[m.id] = 0);
+  pairs.forEach(p => {
+    totals[p.from] -= p.amount;
+    totals[p.to] += p.amount;
+  });
+  return {
+    pairs,
+    totals,
+    settled
+  };
+}
+const isWeeklyBet = type => type !== "season";
+let TICKET_SEQ = 1001;
+const STATUS_STYLE = {
+  pending: {
+    label: "PENDING",
+    color: "#8a6d1f",
+    rotate: -8
+  },
+  accepted: {
+    label: "ON THE BOARD",
+    color: "#3a6b52",
+    rotate: -6
+  },
+  locked: {
+    label: "LOCKED",
+    color: "#7a3b3b",
+    rotate: -10
+  },
+  settled: {
+    label: "GRADED",
+    color: "#4b4b4b",
+    rotate: -6
+  }
+};
+function LeagueSportsbook() {
+  const stored = useMemo(() => typeof window !== "undefined" ? loadStored() : null, []);
+  const [league, setLeague] = useState({
+    linked: !!(stored?.leagueId && stored?.viewerId),
+    leagueId: stored?.leagueId || "",
+    leagueName: stored?.leagueName || "",
+    loading: false,
+    error: null,
+    week: stored?.week || 1,
+    season: stored?.season || new Date().getFullYear(),
+    nflSeasonType: stored?.nflSeasonType || "regular",
+    inputId: stored?.leagueId || ""
+  });
+  const [members, setMembers] = useState(stored?.members || []);
+  const [bets, setBets] = useState(stored?.bets || []);
+  const [ticketSeq, setTicketSeq] = useState(stored?.ticketSeq || TICKET_SEQ);
+  const [tab, setTab] = useState("slips");
+  const [viewer, setViewer] = useState(stored?.viewerId || "");
+  const [setupViewer, setSetupViewer] = useState(stored?.viewerId || "");
+  const [showForm, setShowForm] = useState(false);
+  const [betErrors, setBetErrors] = useState({});
+  const defaultOpponent = members.find(m => m.id !== viewer)?.id || "";
+  const [form, setForm] = useState({
+    type: "matchup",
+    title: "",
+    opponent: defaultOpponent,
+    stake: 10,
+    week: stored?.week || 1,
+    playerId: "",
+    line: "",
+    creatorSide: "over"
+  });
+  const [ledgerView, setLedgerView] = useState("weekly");
+  const [selectedWeek, setSelectedWeek] = useState(stored?.selectedWeek || stored?.week || 1);
+  const [scoreLoadWeek, setScoreLoadWeek] = useState(stored?.week || 1);
+  const [weekData, setWeekData] = useState({});
+  const [weekLoaded, setWeekLoaded] = useState(false);
+  const [weekLoadedFor, setWeekLoadedFor] = useState(null);
+  const [players, setPlayers] = useState({});
+  const [playerProjections, setPlayerProjections] = useState({});
+  const [boardCategory, setBoardCategory] = useState("all");
+  const [boardFantasyTeam, setBoardFantasyTeam] = useState("all");
+  const [boardPosition, setBoardPosition] = useState("all");
+  const [boardNflTeam, setBoardNflTeam] = useState("all");
+  const [globalStake, setGlobalStake] = useState(10);
+  const [betSlipPick, setBetSlipPick] = useState(null);
+  const [customH2H, setCustomH2H] = useState({
+    myPlayerId: "",
+    oppMemberId: "",
+    oppPlayerId: ""
+  });
+  const [customMatchPos, setCustomMatchPos] = useState(true);
+  const [matchupPlayerPick, setMatchupPlayerPick] = useState({
+    my: "",
+    opp: ""
+  });
+  const nameOf = useCallback(id => members.find(m => m.id === id)?.name || id, [members]);
+  const rosterIdFor = useCallback(memberId => members.find(m => m.id === memberId)?.rosterId, [members]);
+  const leagueReady = league.linked && members.length > 0 && viewer;
+  useEffect(() => {
+    if (!league.linked) return;
+    saveStored({
+      leagueId: league.leagueId,
+      leagueName: league.leagueName,
+      members,
+      viewerId: viewer,
+      bets,
+      ticketSeq,
+      selectedWeek,
+      week: league.week,
+      season: league.season,
+      nflSeasonType: league.nflSeasonType
+    });
+  }, [league.linked, league.leagueId, league.leagueName, league.week, league.season, league.nflSeasonType, members, viewer, bets, ticketSeq, selectedWeek]);
+  useEffect(() => {
+    if (defaultOpponent && !members.some(m => m.id === form.opponent && m.id !== viewer)) {
+      setForm(f => ({
+        ...f,
+        opponent: defaultOpponent
+      }));
+    }
+  }, [defaultOpponent, viewer, members, form.opponent]);
+  const fetchLeagueData = useCallback(async leagueId => {
+    const id = leagueId.trim();
+    const [leagueRes, rostersRes, usersRes, stateRes] = await Promise.all([fetch(`https://api.sleeper.app/v1/league/${id}`), fetch(`https://api.sleeper.app/v1/league/${id}/rosters`), fetch(`https://api.sleeper.app/v1/league/${id}/users`), fetch("https://api.sleeper.app/v1/state/nfl")]);
+    if (!leagueRes.ok || !rostersRes.ok || !usersRes.ok) throw new Error("bad response");
+    const leagueData = await leagueRes.json();
+    const rosters = await rostersRes.json();
+    const users = await usersRes.json();
+    const nflState = stateRes.ok ? await stateRes.json() : null;
+    if (!Array.isArray(rosters) || rosters.length === 0) throw new Error("empty");
+    const builtMembers = buildMembers(rosters, users);
+    if (builtMembers.length === 0) throw new Error("empty");
+    const schedule = resolveRegularSeasonSchedule(nflState, leagueData);
+    return {
+      leagueName: leagueData.name || "Your League",
+      members: builtMembers,
+      week: schedule.currentWeek,
+      season: schedule.season,
+      nflSeasonType: schedule.nflSeasonType
+    };
+  }, []);
+  const connectLeague = useCallback(async leagueId => {
+    if (!leagueId.trim()) return;
+    setLeague(s => ({
+      ...s,
+      loading: true,
+      error: null
+    }));
+    try {
+      const data = await fetchLeagueData(leagueId);
+      setMembers(data.members);
+      setLeague(s => ({
+        ...s,
+        linked: false,
+        leagueId: leagueId.trim(),
+        leagueName: data.leagueName,
+        week: data.week,
+        season: data.season,
+        nflSeasonType: data.nflSeasonType,
+        loading: false,
+        error: null,
+        inputId: leagueId.trim()
+      }));
+      setSelectedWeek(data.week);
+      setScoreLoadWeek(data.week);
+      setForm(f => ({
+        ...f,
+        week: data.week
+      }));
+      setSetupViewer(prev => prev || data.members[0]?.id || "");
+    } catch {
+      setLeague(s => ({
+        ...s,
+        loading: false,
+        error: "Couldn't load that league. Double-check the Sleeper league ID."
+      }));
+    }
+  }, [fetchLeagueData]);
+  const finishSetup = useCallback(() => {
+    if (!setupViewer) return;
+    setViewer(setupViewer);
+    setLeague(s => ({
+      ...s,
+      linked: true
+    }));
+    setTab("slips");
+  }, [setupViewer]);
+  const refreshLeague = useCallback(async () => {
+    if (!league.leagueId) return;
+    setLeague(s => ({
+      ...s,
+      loading: true,
+      error: null
+    }));
+    try {
+      const data = await fetchLeagueData(league.leagueId);
+      setMembers(data.members);
+      setLeague(s => ({
+        ...s,
+        leagueName: data.leagueName,
+        week: data.week,
+        season: data.season,
+        nflSeasonType: data.nflSeasonType,
+        loading: false,
+        error: null
+      }));
+      setSelectedWeek(w => clampWeekToSeason(w, data.week));
+      setScoreLoadWeek(data.week);
+    } catch {
+      setLeague(s => ({
+        ...s,
+        loading: false,
+        error: "Couldn't refresh league data. Try again in a moment."
+      }));
+    }
+  }, [fetchLeagueData, league.leagueId]);
+  const disconnectLeague = useCallback(() => {
+    if (!window.confirm("Disconnect this league? All local bets and balances will be cleared.")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    setLeague({
+      linked: false,
+      leagueId: "",
+      leagueName: "",
+      loading: false,
+      error: null,
+      week: 1,
+      season: new Date().getFullYear(),
+      nflSeasonType: "regular",
+      inputId: ""
+    });
+    setMembers([]);
+    setBets([]);
+    setViewer("");
+    setSetupViewer("");
+    setTicketSeq(TICKET_SEQ);
+    setWeekData({});
+    setWeekLoaded(false);
+    setWeekLoadedFor(null);
+    setPlayers({});
+    setPlayerProjections({});
+    setBoardCategory("all");
+    setBoardFantasyTeam("all");
+    setBoardPosition("all");
+    setBoardNflTeam("all");
+    setGlobalStake(10);
+    setBetSlipPick(null);
+    setCustomH2H({
+      myPlayerId: "",
+      oppMemberId: "",
+      oppPlayerId: ""
+    });
+    setTab("slips");
+  }, []);
+  useEffect(() => {
+    if (league.linked && league.leagueId) refreshLeague();
+    // only refresh roster names on first load of a linked league
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  async function loadBoardData(weekNum = league.week) {
+    if (!league.leagueId) return;
+    const wk = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(weekNum) || 1));
+    setLeague(s => ({
+      ...s,
+      loading: true,
+      error: null
+    }));
+    try {
+      const [currentRes, stateRes, leagueRes] = await Promise.all([fetch(`https://api.sleeper.app/v1/league/${league.leagueId}/matchups/${wk}`), fetch("https://api.sleeper.app/v1/state/nfl"), fetch(`https://api.sleeper.app/v1/league/${league.leagueId}`)]);
+      if (!currentRes.ok) throw new Error("bad response");
+      const current = await currentRes.json();
+      const nflState = stateRes.ok ? await stateRes.json() : null;
+      const leagueData = leagueRes.ok ? await leagueRes.json() : null;
+      const schedule = resolveRegularSeasonSchedule(nflState, leagueData);
+      const season = schedule.season;
+      const map = {};
+      current.forEach(row => {
+        map[row.roster_id] = row;
+      });
+      const starterIds = members.flatMap(m => m.starters || []);
+      const playerInfo = await fetchPlayerInfo(starterIds);
+      const projections = await fetchSleeperProjections(wk, season, starterIds, "regular");
+      setWeekData(map);
+      setPlayerProjections(projections);
+      setPlayers(playerInfo);
+      setWeekLoaded(true);
+      setWeekLoadedFor(wk);
+      setLeague(s => ({
+        ...s,
+        loading: false,
+        season,
+        week: schedule.currentWeek,
+        nflSeasonType: schedule.nflSeasonType
+      }));
+      setSelectedWeek(sel => clampWeekToSeason(sel, schedule.currentWeek));
+      setScoreLoadWeek(schedule.currentWeek);
+    } catch {
+      setLeague(s => ({
+        ...s,
+        loading: false,
+        error: "Couldn't load Sleeper projections for that week. Try again in a moment."
+      }));
+    }
+  }
+  async function loadWeek(weekNum = scoreLoadWeek) {
+    await loadBoardData(weekNum);
+  }
+
+  // ---------- ledger ----------
+  const ledger = useMemo(() => computeLedger(bets, members), [bets, members]);
+  const currentWeek = Number(league.week) || 1;
+  const seasonWeeks = useMemo(() => Array.from({
+    length: currentWeek
+  }, (_, i) => currentWeek - i), [currentWeek]);
+  const activeWeek = useMemo(() => {
+    return clampWeekToSeason(selectedWeek, currentWeek);
+  }, [selectedWeek, currentWeek]);
+  const weekNavIndex = seasonWeeks.indexOf(activeWeek);
+  const goOlderWeek = () => {
+    if (weekNavIndex < seasonWeeks.length - 1) setSelectedWeek(seasonWeeks[weekNavIndex + 1]);
+  };
+  const goNewerWeek = () => {
+    if (weekNavIndex > 0) setSelectedWeek(seasonWeeks[weekNavIndex - 1]);
+  };
+  const renderWeekNav = (extra = null) => /*#__PURE__*/React.createElement("div", {
+    className: "sb-slips-header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-week-nav",
+    style: {
+      marginBottom: 0
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    disabled: weekNavIndex >= seasonWeeks.length - 1,
+    onClick: goOlderWeek
+  }, /*#__PURE__*/React.createElement(ChevronLeft, {
+    size: 16
+  })), /*#__PURE__*/React.createElement("select", {
+    className: "sb-week-select",
+    value: activeWeek,
+    onChange: e => setSelectedWeek(Number(e.target.value)),
+    "aria-label": "Select week"
+  }, Array.from({
+    length: currentWeek
+  }, (_, i) => i + 1).map(w => /*#__PURE__*/React.createElement("option", {
+    key: w,
+    value: w
+  }, "Week ", w))), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    disabled: weekNavIndex <= 0,
+    onClick: goNewerWeek
+  }, /*#__PURE__*/React.createElement(ChevronRight, {
+    size: 16
+  }))), extra);
+  const matchupWeek = currentWeek;
+  useEffect(() => {
+    if (!leagueReady || !league.leagueId) return;
+    if (tab !== "board" && tab !== "matchup") return;
+    const weekToLoad = tab === "matchup" ? matchupWeek : activeWeek;
+    if (weekLoadedFor !== weekToLoad) loadBoardData(weekToLoad);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, activeWeek, matchupWeek, leagueReady, league.leagueId]);
+  const weekBets = useMemo(() => bets.filter(b => Number(b.week) === activeWeek), [bets, activeWeek]);
+  const seasonBets = useMemo(() => bets.filter(b => b.week == null || b.week === ""), [bets]);
+  const weeklyLedger = useMemo(() => computeLedger(bets, members, activeWeek), [bets, members, activeWeek]);
+  const boardOfferings = useMemo(() => generateBoardOfferings(members, activeWeek, weekLoadedFor === activeWeek ? weekData : {}, players, playerProjections), [members, activeWeek, weekData, weekLoadedFor, players, playerProjections]);
+  const boardNflTeams = useMemo(() => {
+    const teams = new Set();
+    Object.values(players).forEach(p => {
+      if (p.team) teams.add(p.team);
+    });
+    return [...teams].sort();
+  }, [players]);
+  const filteredBoardOfferings = useMemo(() => filterBoardOfferings(boardOfferings, {
+    category: boardCategory,
+    fantasyTeam: boardFantasyTeam,
+    position: boardPosition,
+    nflTeam: boardNflTeam
+  }), [boardOfferings, boardCategory, boardFantasyTeam, boardPosition, boardNflTeam]);
+  const boardEvents = useMemo(() => groupBoardEvents(filteredBoardOfferings, members), [filteredBoardOfferings, members]);
+  const viewerMember = useMemo(() => members.find(m => m.id === viewer) || null, [members, viewer]);
+  const matchupDataReady = weekLoadedFor === matchupWeek;
+  const matchupOpponent = useMemo(() => {
+    if (!matchupDataReady || !viewer) return null;
+    return getMatchupOpponent(viewer, members, weekData);
+  }, [matchupDataReady, viewer, members, weekData]);
+  const matchupOfferings = useMemo(() => {
+    if (!viewerMember || !matchupOpponent || !matchupDataReady) return [];
+    return buildMatchupOfferings(viewerMember, matchupOpponent, matchupWeek, players, playerProjections);
+  }, [viewerMember, matchupOpponent, matchupWeek, players, playerProjections, matchupDataReady]);
+  const myStarterRows = useMemo(() => viewerMember && matchupDataReady ? starterRows(viewerMember, players, playerProjections, weekData) : [], [viewerMember, players, playerProjections, weekData, matchupDataReady]);
+  const oppStarterRows = useMemo(() => matchupOpponent && matchupDataReady ? starterRows(matchupOpponent, players, playerProjections, weekData) : [], [matchupOpponent, players, playerProjections, weekData, matchupDataReady]);
+  const myLineupProj = viewerMember ? sumLineupLine(viewerMember, players, playerProjections) : 0;
+  const oppLineupProj = matchupOpponent ? sumLineupLine(matchupOpponent, players, playerProjections) : 0;
+  const myStarterPicks = useMemo(() => starterPickOptions(viewerMember, players, playerProjections), [viewerMember, players, playerProjections]);
+  const customOppMember = useMemo(() => members.find(m => m.id === customH2H.oppMemberId) || null, [members, customH2H.oppMemberId]);
+  const myPlayerMeta = players[customH2H.myPlayerId];
+  const oppPosFilter = customMatchPos && myPlayerMeta?.position ? myPlayerMeta.position : "all";
+  const oppStarterPicks = useMemo(() => starterPickOptions(customOppMember, players, playerProjections, oppPosFilter), [customOppMember, players, playerProjections, oppPosFilter]);
+  const customH2hOffering = useMemo(() => buildCustomH2hOffering(viewer, customH2H.myPlayerId, customH2H.oppMemberId, customH2H.oppPlayerId, activeWeek, players, playerProjections, members), [viewer, customH2H, activeWeek, players, playerProjections, members]);
+  const matchupBetOffering = useMemo(() => {
+    const {
+      my,
+      opp
+    } = matchupPlayerPick;
+    if (my && opp && matchupOpponent) {
+      return buildCustomH2hOffering(viewer, my, matchupOpponent.id, opp, matchupWeek, players, playerProjections, members);
+    }
+    const singleId = my || opp;
+    if (!singleId) return null;
+    return matchupOfferings.find(o => o.kind === "player_ou" && o.playerId === singleId) || null;
+  }, [matchupPlayerPick, matchupOpponent, viewer, matchupWeek, players, playerProjections, members, matchupOfferings]);
+  useEffect(() => {
+    setMatchupPlayerPick({
+      my: "",
+      opp: ""
+    });
+    setBetSlipPick(null);
+  }, [tab, matchupWeek, matchupOpponent?.id]);
+  const handleMatchupPlayerClick = (pid, isYou) => {
+    setBetSlipPick(null);
+    setMatchupPlayerPick(prev => {
+      if (isYou) {
+        const my = prev.my === pid ? "" : pid;
+        return {
+          my,
+          opp: prev.opp
+        };
+      }
+      const opp = prev.opp === pid ? "" : pid;
+      return {
+        my: prev.my,
+        opp
+      };
+    });
+  };
+  const boardStake = () => Number(globalStake) || 10;
+  const selectBetPick = (offering, side) => {
+    const disabled = side.memberId === viewer && (offering.kind === "lineup_ml" || offering.kind === "player_h2h");
+    if (disabled) return;
+    setBetSlipPick({
+      offering,
+      side
+    });
+  };
+  const renderMarketRow = o => /*#__PURE__*/React.createElement("div", {
+    className: "dk-market",
+    key: o.id
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-market-head"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-market-title"
+  }, o.title), /*#__PURE__*/React.createElement("div", {
+    className: "dk-market-meta"
+  }, o.subtitle)), /*#__PURE__*/React.createElement("div", {
+    className: "dk-odds-row"
+  }, o.sides.map(side => {
+    const disabled = side.memberId === viewer && (o.kind === "lineup_ml" || o.kind === "player_h2h");
+    const selected = betSlipPick?.offering?.id === o.id && betSlipPick?.side?.key === side.key;
+    return /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      key: side.key,
+      className: `dk-odds-btn${selected ? " selected" : ""}`,
+      disabled: disabled,
+      onClick: () => selectBetPick(o, side)
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "dk-odds-label"
+    }, side.label), side.sublabel && /*#__PURE__*/React.createElement("span", {
+      className: "dk-odds-sublabel"
+    }, side.sublabel), side.pick && /*#__PURE__*/React.createElement("span", {
+      className: "dk-odds-sublabel"
+    }, side.pick === "over" ? "Over" : "Under"), /*#__PURE__*/React.createElement("span", {
+      className: "dk-odds-value"
+    }, formatOdds(side.odds)));
+  })));
+  const renderEventCard = (title, subtitle, markets, keyId = title) => /*#__PURE__*/React.createElement("div", {
+    className: "dk-event",
+    key: keyId
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-title"
+  }, title), subtitle && /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-sub"
+  }, subtitle)), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-markets"
+  }, markets));
+  const renderBetSlipBar = () => {
+    if (!betSlipPick) return null;
+    const {
+      offering,
+      side
+    } = betSlipPick;
+    const stake = boardStake();
+    const toWin = payoutFromOdds(stake, side.odds);
+    return /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-inner"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-pick"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-label"
+    }, "Bet slip"), /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-title"
+    }, offering.title), /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-detail"
+    }, side.label, " \xB7 ", formatOdds(side.odds))), /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-actions"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-stake-wrap"
+    }, /*#__PURE__*/React.createElement("label", null, "Wager"), /*#__PURE__*/React.createElement("input", {
+      type: "number",
+      min: "1",
+      className: "dk-betslip-stake",
+      value: globalStake,
+      onChange: e => setGlobalStake(e.target.value)
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "dk-betslip-payout"
+    }, /*#__PURE__*/React.createElement("span", null, "Pays"), /*#__PURE__*/React.createElement("strong", null, "$", toWin)), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "dk-betslip-place",
+      onClick: () => placeBoardBet(offering, side)
+    }, "Place Bet \xB7 $", stake), /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: "dk-betslip-clear",
+      onClick: () => setBetSlipPick(null),
+      "aria-label": "Clear"
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 16
+    })))));
+  };
+  const renderStarterColumn = (member, rows, totalProj, isYou) => {
+    const selectedId = isYou ? matchupPlayerPick.my : matchupPlayerPick.opp;
+    return /*#__PURE__*/React.createElement("div", {
+      className: `sb-matchup-team${isYou ? " you" : ""}`
+    }, /*#__PURE__*/React.createElement("h4", null, member.name, isYou ? " (You)" : ""), /*#__PURE__*/React.createElement("div", {
+      className: "sb-matchup-total"
+    }, "Upcoming Sleeper PPR proj: ", /*#__PURE__*/React.createElement("strong", null, totalProj), weekData[member.rosterId]?.points != null && /*#__PURE__*/React.createElement(React.Fragment, null, " \xB7 Actual: ", /*#__PURE__*/React.createElement("strong", null, weekData[member.rosterId].points))), rows.map(row => /*#__PURE__*/React.createElement("button", {
+      type: "button",
+      className: `sb-matchup-player${selectedId === row.pid ? " selected" : ""}`,
+      key: row.pid,
+      onClick: () => handleMatchupPlayerClick(row.pid, isYou),
+      title: isYou ? "Tap to bet this player" : "Tap to bet against this player"
+    }, /*#__PURE__*/React.createElement("span", {
+      className: "sb-matchup-pos"
+    }, row.position), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "sb-matchup-name"
+    }, row.name), row.team && /*#__PURE__*/React.createElement("div", {
+      className: "sb-matchup-meta"
+    }, row.team)), /*#__PURE__*/React.createElement("span", {
+      className: "sb-matchup-proj",
+      title: "Sleeper PPR projection"
+    }, formatProj(row.proj)), /*#__PURE__*/React.createElement("span", {
+      className: "sb-matchup-actual",
+      title: "Actual points"
+    }, row.actual != null ? row.actual.toFixed(1) : "—"))));
+  };
+  function placeBoardBet(offering, side) {
+    const stake = boardStake();
+    if (stake < 1) return;
+    let opponent = "";
+    let title = offering.title;
+    const bet = {
+      id: "b" + Date.now(),
+      ticket: ticketSeq,
+      type: offering.type,
+      title,
+      creator: viewer,
+      opponent: "",
+      stake,
+      status: "pending",
+      result: null,
+      boardLineId: offering.id,
+      boardKind: offering.kind,
+      odds: side.odds,
+      toWin: payoutFromOdds(stake, side.odds),
+      ...(offering.type !== "season" ? {
+        week: offering.week
+      } : {})
+    };
+    if (offering.kind === "lineup_ml") {
+      opponent = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
+      if (opponent === viewer) {
+        window.alert("Pick the other side — you can't bet against yourself.");
+        return;
+      }
+      bet.opponent = opponent;
+      bet.pickMemberId = side.memberId;
+      bet.matchupPeerId = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
+      title = `${nameOf(side.memberId)} lineup beats ${nameOf(opponent)} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
+      bet.title = title;
+    } else if (offering.kind === "player_ou") {
+      opponent = offering.counterpartyId || members.find(m => m.id !== viewer && m.id !== offering.ownerId)?.id || members.find(m => m.id !== viewer)?.id;
+      if (!opponent) return;
+      bet.opponent = opponent;
+      bet.playerId = offering.playerId;
+      bet.line = offering.line;
+      bet.creatorSide = side.pick;
+      bet.ownerId = offering.ownerId;
+      title = `${playerLabel(players, offering.playerId)} ${side.pick === "over" ? "Over" : "Under"} ${offering.line} pts @ ${formatOdds(side.odds)}`;
+      bet.title = title;
+    } else if (offering.kind === "lineup_ou") {
+      opponent = members.find(m => m.id !== viewer && m.id !== offering.subjectId)?.id || members.find(m => m.id !== viewer)?.id;
+      if (!opponent) return;
+      bet.opponent = opponent;
+      bet.line = offering.line;
+      bet.creatorSide = side.pick;
+      bet.subjectId = offering.subjectId;
+      title = `${nameOf(offering.subjectId)} lineup ${side.pick === "over" ? "Over" : "Under"} ${offering.line} pts @ ${formatOdds(side.odds)}`;
+      bet.title = title;
+    } else if (offering.kind === "player_h2h") {
+      opponent = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
+      if (opponent === viewer) {
+        window.alert("Pick the other side — you can't bet against yourself.");
+        return;
+      }
+      bet.opponent = opponent;
+      bet.playerIdA = offering.playerIdA;
+      bet.playerIdB = offering.playerIdB;
+      bet.pickPlayerId = side.playerId;
+      title = `${playerLabel(players, side.playerId)} beats ${playerLabel(players, side.playerId === offering.playerIdA ? offering.playerIdB : offering.playerIdA)} @ ${formatOdds(side.odds)}`;
+      bet.title = title;
+    }
+    if (!bet.opponent) return;
+    setBets(prev => [bet, ...prev]);
+    setTicketSeq(n => n + 1);
+    setBetSlipPick(null);
+    setTab("slips");
+    setSelectedWeek(offering.week ?? activeWeek);
+  }
+  const viewerStatement = useMemo(() => {
+    const owes = weeklyLedger.pairs.filter(p => p.from === viewer);
+    const owed = weeklyLedger.pairs.filter(p => p.to === viewer);
+    return {
+      owes,
+      owed,
+      net: weeklyLedger.totals[viewer] || 0
+    };
+  }, [weeklyLedger, viewer]);
+  function advance(betId, action) {
+    setBetErrors(e => ({
+      ...e,
+      [betId]: null
+    }));
+    setBets(prev => prev.map(b => {
+      if (b.id !== betId) return b;
+      if (action === "accept") return {
+        ...b,
+        status: "accepted"
+      };
+      if (action === "decline") return {
+        ...b,
+        status: "declined"
+      };
+      if (action === "lock") return {
+        ...b,
+        status: "locked"
+      };
+      if (action === "grade-creator") return {
+        ...b,
+        status: "settled",
+        result: "creator"
+      };
+      if (action === "grade-opponent") return {
+        ...b,
+        status: "settled",
+        result: "opponent"
+      };
+      return b;
+    }));
+  }
+  function autoGrade(bet) {
+    setBetErrors(e => ({
+      ...e,
+      [bet.id]: null
+    }));
+    if (bet.type === "matchup") {
+      const rA = rosterIdFor(bet.creator);
+      const rB = rosterIdFor(bet.opponent);
+      if (!rA || !rB) {
+        setBetErrors(e => ({
+          ...e,
+          [bet.id]: "Couldn't find both managers in this league."
+        }));
+        return;
+      }
+      if (bet.pickMemberId && bet.matchupPeerId) {
+        const mPick = members.find(m => m.id === bet.pickMemberId);
+        const mPeer = members.find(m => m.id === bet.matchupPeerId);
+        if (!mPick || !mPeer) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: "Couldn't find both managers in this league."
+          }));
+          return;
+        }
+        const ptsPick = lineupFantasyPts(weekData, mPick.rosterId, mPick.starters);
+        const ptsPeer = lineupFantasyPts(weekData, mPeer.rosterId, mPeer.starters);
+        if (ptsPick == null || ptsPeer == null) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+          }));
+          return;
+        }
+        if (ptsPick === ptsPeer) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: `Tied at ${ptsPick} lineup pts — grade manually (push?).`
+          }));
+          return;
+        }
+        const pickWins = bet.pickMemberId === mPick.id ? ptsPick > ptsPeer : ptsPeer > ptsPick;
+        setBets(prev => prev.map(b => b.id === bet.id ? {
+          ...b,
+          status: "settled",
+          result: pickWins ? "creator" : "opponent",
+          actual: ptsPick
+        } : b));
+        return;
+      }
+      const dataA = weekData[rA];
+      const dataB = weekData[rB];
+      if (!dataA || !dataB) {
+        setBetErrors(e => ({
+          ...e,
+          [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+        }));
+        return;
+      }
+      const result = dataA.points > dataB.points ? "creator" : dataA.points < dataB.points ? "opponent" : null;
+      if (result === null) {
+        setBetErrors(e => ({
+          ...e,
+          [bet.id]: `Tied at ${dataA.points} pts — grade manually (push?).`
+        }));
+        return;
+      }
+      setBets(prev => prev.map(b => b.id === bet.id ? {
+        ...b,
+        status: "settled",
+        result
+      } : b));
+      return;
+    }
+    if (bet.type === "prop") {
+      if (bet.boardKind === "player_h2h" && bet.playerIdA && bet.playerIdB) {
+        const ptsA = getPlayerPts(weekData, members, bet.playerIdA);
+        const ptsB = getPlayerPts(weekData, members, bet.playerIdB);
+        if (ptsA == null || ptsB == null) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+          }));
+          return;
+        }
+        if (ptsA === ptsB) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: `Tied at ${ptsA} pts — grade manually (push?).`
+          }));
+          return;
+        }
+        const pickWins = bet.pickPlayerId === bet.playerIdA ? ptsA > ptsB : ptsB > ptsA;
+        setBets(prev => prev.map(b => b.id === bet.id ? {
+          ...b,
+          status: "settled",
+          result: pickWins ? "creator" : "opponent",
+          actual: ptsA
+        } : b));
+        return;
+      }
+      if (bet.boardKind === "lineup_ou" && bet.subjectId && bet.line !== "" && bet.line !== undefined) {
+        const member = members.find(m => m.id === bet.subjectId);
+        if (!member) return;
+        const actual = lineupFantasyPts(weekData, member.rosterId, member.starters);
+        if (actual == null) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+          }));
+          return;
+        }
+        const over = actual > Number(bet.line);
+        const creatorWins = bet.creatorSide === "over" && over || bet.creatorSide === "under" && !over;
+        setBets(prev => prev.map(b => b.id === bet.id ? {
+          ...b,
+          status: "settled",
+          result: creatorWins ? "creator" : "opponent",
+          actual
+        } : b));
+        return;
+      }
+      if (bet.subjectId && bet.line !== "" && bet.line !== undefined && !bet.playerId) {
+        const rosterId = rosterIdFor(bet.subjectId);
+        const data = weekData[rosterId];
+        if (!data) {
+          setBetErrors(e => ({
+            ...e,
+            [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+          }));
+          return;
+        }
+        const actual = data.points;
+        const over = actual > Number(bet.line);
+        const creatorWins = bet.creatorSide === "over" && over || bet.creatorSide === "under" && !over;
+        setBets(prev => prev.map(b => b.id === bet.id ? {
+          ...b,
+          status: "settled",
+          result: creatorWins ? "creator" : "opponent",
+          actual
+        } : b));
+        return;
+      }
+      if (!bet.playerId || bet.line === "" || bet.line === undefined) {
+        setBetErrors(e => ({
+          ...e,
+          [bet.id]: "This slip needs a Sleeper player ID and line — edit it to add one."
+        }));
+        return;
+      }
+      const row = Object.values(weekData).find(r => r.players_points && bet.playerId in r.players_points);
+      if (!row) {
+        setBetErrors(e => ({
+          ...e,
+          [bet.id]: `Load week ${bet.week || league.week} scores in the League tab first.`
+        }));
+        return;
+      }
+      const actual = row.players_points[bet.playerId];
+      const over = actual > Number(bet.line);
+      const creatorWins = bet.creatorSide === "over" && over || bet.creatorSide === "under" && !over;
+      setBets(prev => prev.map(b => b.id === bet.id ? {
+        ...b,
+        status: "settled",
+        result: creatorWins ? "creator" : "opponent",
+        actual
+      } : b));
+      return;
+    }
+    setBetErrors(e => ({
+      ...e,
+      [bet.id]: "This bet type isn't stat-based — grade it manually."
+    }));
+  }
+  function submitBet(e) {
+    e.preventDefault();
+    if (!form.title.trim()) return;
+    const newBet = {
+      id: "b" + Date.now(),
+      ticket: ticketSeq,
+      type: form.type,
+      title: form.title.trim(),
+      creator: viewer,
+      opponent: form.opponent,
+      stake: Number(form.stake) || 0,
+      status: "pending",
+      result: null,
+      ...(isWeeklyBet(form.type) ? {
+        week: Number(form.week) || Number(league.week) || 1
+      } : {}),
+      ...(form.type === "prop" ? {
+        playerId: form.playerId.trim(),
+        line: form.line,
+        creatorSide: form.creatorSide
+      } : {})
+    };
+    setBets(prev => [newBet, ...prev]);
+    setTicketSeq(n => n + 1);
+    setForm({
+      type: "matchup",
+      title: "",
+      opponent: defaultOpponent,
+      stake: 10,
+      week: activeWeek,
+      playerId: "",
+      line: "",
+      creatorSide: "over"
+    });
+    setShowForm(false);
+    setTab("slips");
+    setSelectedWeek(newBet.week ?? activeWeek);
+  }
+  function renderBetSlip(b) {
+    const s = STATUS_STYLE[b.status] || STATUS_STYLE.pending;
+    const isViewerOpponent = b.opponent === viewer && b.status === "pending";
+    const canAuto = AUTO_GRADABLE[b.type] && b.status === "locked";
+    return /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket",
+      key: b.id
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "sb-stamp",
+      style: {
+        color: s.color,
+        transform: `rotate(${s.rotate}deg)`
+      }
+    }, s.label), /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-top"
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-num"
+    }, "TICKET NO. ", b.ticket), /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-type"
+    }, TYPE_LABEL[b.type], b.week ? ` · Wk ${b.week}` : ""), /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-title"
+    }, b.title), /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-parties"
+    }, nameOf(b.creator), " ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        opacity: 0.5
+      }
+    }, "vs"), " ", nameOf(b.opponent)), b.odds != null && /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-odds"
+    }, formatOdds(b.odds), " \xB7 win $", b.toWin ?? payoutFromOdds(b.stake, b.odds))), /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-stake"
+    }, /*#__PURE__*/React.createElement("span", null, "stake"), "$", b.stake)), /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-perf"
+    }), b.status === "settled" ? /*#__PURE__*/React.createElement("div", {
+      className: "sb-result-line"
+    }, /*#__PURE__*/React.createElement("b", null, nameOf(b.result === "creator" ? b.creator : b.opponent)), " won the slip \u2014", " ", nameOf(b.result === "creator" ? b.opponent : b.creator), " pays $", b.stake, b.actual !== undefined ? ` (actual: ${b.actual} pts)` : "", ".") : b.status === "declined" ? /*#__PURE__*/React.createElement("div", {
+      className: "sb-result-line"
+    }, "Declined \u2014 no money moves.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+      className: "sb-ticket-actions"
+    }, b.status === "pending" && isViewerOpponent && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+      className: "sb-btn sb-btn-accept",
+      onClick: () => advance(b.id, "accept")
+    }, /*#__PURE__*/React.createElement(Check, {
+      size: 12
+    }), " Accept"), /*#__PURE__*/React.createElement("button", {
+      className: "sb-btn sb-btn-decline",
+      onClick: () => advance(b.id, "decline")
+    }, /*#__PURE__*/React.createElement(X, {
+      size: 12
+    }), " Decline")), b.status === "pending" && !isViewerOpponent && /*#__PURE__*/React.createElement("span", {
+      className: "sb-result-line"
+    }, "Waiting on ", nameOf(b.opponent), " to accept."), b.status === "accepted" && /*#__PURE__*/React.createElement("button", {
+      className: "sb-btn sb-btn-lock",
+      onClick: () => advance(b.id, "lock")
+    }, /*#__PURE__*/React.createElement(Lock, {
+      size: 12
+    }), " Lock at kickoff"), b.status === "locked" && /*#__PURE__*/React.createElement(React.Fragment, null, canAuto && /*#__PURE__*/React.createElement("button", {
+      className: "sb-btn sb-btn-auto",
+      onClick: () => autoGrade(b)
+    }, /*#__PURE__*/React.createElement(Zap, {
+      size: 12
+    }), " Auto-grade"), /*#__PURE__*/React.createElement("span", {
+      className: "sb-result-line",
+      style: {
+        margin: "0 0.1rem"
+      }
+    }, "or by hand:"), /*#__PURE__*/React.createElement("button", {
+      className: "sb-btn sb-btn-grade",
+      onClick: () => advance(b.id, "grade-creator")
+    }, /*#__PURE__*/React.createElement(Trophy, {
+      size: 12
+    }), " ", nameOf(b.creator), " won"), /*#__PURE__*/React.createElement("button", {
+      className: "sb-btn sb-btn-grade",
+      onClick: () => advance(b.id, "grade-opponent")
+    }, /*#__PURE__*/React.createElement(Trophy, {
+      size: 12
+    }), " ", nameOf(b.opponent), " won"))), betErrors[b.id] && /*#__PURE__*/React.createElement("div", {
+      className: "sb-bet-error"
+    }, /*#__PURE__*/React.createElement(AlertTriangle, {
+      size: 12
+    }), " ", betErrors[b.id])));
+  }
+  const weekSlipSummary = useMemo(() => {
+    const open = weekBets.filter(b => b.status !== "settled" && b.status !== "declined");
+    return {
+      total: weekBets.length,
+      open: open.length,
+      stake: open.reduce((sum, b) => sum + b.stake, 0)
+    };
+  }, [weekBets]);
+  return /*#__PURE__*/React.createElement("div", {
+    className: "sb-root"
+  }, /*#__PURE__*/React.createElement("style", null, `
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
+        .sb-root {
+          --felt: #163229; --felt-dark: #102520;
+          --paper: #f2e8d2; --ink: #23281f;
+          --gold: #c9a227; --gold-bright: #e0bc4a;
+          --red: #a6373c; --green: #3f6b52; --line: #3f6657;
+          font-family: 'Inter', sans-serif;
+          background: var(--felt);
+          background-image:
+            radial-gradient(circle at 20% 10%, rgba(255,255,255,0.03), transparent 40%),
+            radial-gradient(circle at 80% 80%, rgba(255,255,255,0.03), transparent 40%);
+          color: var(--paper);
+          min-height: 100%;
+          padding-bottom: 5.5rem;
+        }
+        .sb-display { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.03em; }
+        .sb-mono { font-family: 'IBM Plex Mono', monospace; }
+
+        .sb-marquee { border-bottom: 2px solid var(--line); background: linear-gradient(180deg, var(--felt-dark), var(--felt)); padding: 1.1rem 1.25rem 1rem; }
+        .sb-marquee-title { font-size: 2rem; line-height: 1; color: var(--gold-bright); text-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+        .sb-marquee-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; letter-spacing: 0.12em; color: #a9c4b6; text-transform: uppercase; }
+
+        .sb-viewer-select { background: var(--felt-dark); border: 1px solid var(--line); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 3px; }
+
+        .sb-tabs { display: flex; gap: 0.3rem; padding: 0.9rem 1.25rem 0; flex-wrap: wrap; }
+        .sb-tab { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.04em; padding: 0.5rem 1.1rem 0.6rem; color: #a9c4b6; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; }
+        .sb-tab.active { color: var(--gold-bright); border-bottom-color: var(--gold); }
+
+        .sb-newbet-btn { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; background: var(--gold); color: #241d05; border: none; padding: 0.5rem 0.8rem; border-radius: 3px; display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-weight: 600; }
+        .sb-newbet-btn:hover { background: var(--gold-bright); }
+
+        .sb-content { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
+
+        .sb-ticket { position: relative; background: var(--paper); color: var(--ink); border-radius: 4px; padding: 1.1rem 1.2rem 1rem; margin-bottom: 1.4rem; box-shadow: 0 6px 14px rgba(0,0,0,0.28); }
+        .sb-ticket::before, .sb-ticket::after { content: ""; position: absolute; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; background: var(--felt); border-radius: 50%; }
+        .sb-ticket::before { left: -10px; } .sb-ticket::after { right: -10px; }
+        .sb-ticket-perf { border-top: 2px dashed #cdbf9c; margin: 0.7rem 0; }
+        .sb-ticket-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+        .sb-ticket-num { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; letter-spacing: 0.08em; }
+        .sb-ticket-type { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; background: var(--felt); color: var(--gold-bright); padding: 0.15rem 0.5rem; border-radius: 2px; margin-bottom: 0.35rem; }
+        .sb-ticket-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; line-height: 1.15; letter-spacing: 0.01em; }
+        .sb-ticket-parties { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #5a5340; margin-top: 0.3rem; }
+        .sb-ticket-stake { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--green); text-align: right; white-space: nowrap; }
+        .sb-ticket-stake span { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #8a7c55; letter-spacing: 0.1em; }
+
+        .sb-stamp { position: absolute; top: 0.9rem; right: 1.1rem; font-family: 'Bebas Neue', sans-serif; font-size: 0.85rem; letter-spacing: 0.12em; padding: 0.15rem 0.5rem; border: 2px solid currentColor; border-radius: 3px; opacity: 0.85; pointer-events: none; }
+
+        .sb-ticket-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 0.6rem; }
+        .sb-btn { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.4rem 0.65rem; border-radius: 3px; border: 1px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+        .sb-btn-accept { background: var(--green); color: #eef7ef; }
+        .sb-btn-decline { background: transparent; color: var(--red); border-color: var(--red); }
+        .sb-btn-lock { background: var(--ink); color: var(--paper); }
+        .sb-btn-grade { background: transparent; color: var(--ink); border-color: #8a7c55; }
+        .sb-btn-auto { background: var(--gold); color: #241d05; }
+        .sb-btn:hover { filter: brightness(1.08); }
+        .sb-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .sb-result-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #5a5340; margin-top: 0.5rem; }
+        .sb-result-line b { color: var(--green); }
+        .sb-bet-error { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--red); margin-top: 0.4rem; display: flex; align-items: center; gap: 0.3rem; }
+
+        .sb-board { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 1.1rem 1.2rem; margin-bottom: 1.5rem; }
+        .sb-board h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.75rem; }
+        .sb-board p.sb-note { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; margin: -0.4rem 0 0.9rem; line-height: 1.5; }
+        .sb-standing-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
+        .sb-standing-row:last-child { border-bottom: none; }
+        .sb-standing-name { font-family: 'Inter', sans-serif; font-weight: 600; }
+        .sb-owe-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
+        .sb-owe-row:last-child { border-bottom: none; }
+        .sb-empty { font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; color: #7ea08f; padding: 0.5rem 0; }
+
+        .sb-form-panel { background: var(--paper); color: var(--ink); border-radius: 6px; padding: 1.1rem 1.2rem; margin-bottom: 1.5rem; }
+        .sb-form-panel h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; margin: 0 0 0.75rem; }
+        .sb-field { margin-bottom: 0.75rem; }
+        .sb-field label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #6b6144; margin-bottom: 0.25rem; }
+        .sb-field input, .sb-field select { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid #c9bb95; border-radius: 3px; font-family: 'Inter', sans-serif; font-size: 0.85rem; background: #fbf6ea; color: var(--ink); }
+        .sb-form-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .sb-form-row > .sb-field { flex: 1; min-width: 120px; }
+        .sb-form-actions { display: flex; gap: 0.6rem; margin-top: 0.4rem; }
+        .sb-btn-submit { background: var(--green); color: #eef7ef; }
+        .sb-btn-cancel { background: transparent; color: #6b6144; border-color: #c9bb95; }
+
+        .sb-sync-row { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
+        .sb-sync-row:last-child { border-bottom: none; }
+        .sb-sync-select { background: var(--paper); color: var(--ink); border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.3rem 0.5rem; }
+        .sb-error-banner { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #e0949a; margin-top: 0.5rem; display: flex; gap: 0.4rem; align-items: center; }
+        .sb-week-points { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; }
+
+        .sb-ledger-toggle { display: flex; gap: 0.35rem; margin-bottom: 1rem; }
+        .sb-ledger-toggle button { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.45rem 0.75rem; border-radius: 3px; border: 1px solid var(--line); background: transparent; color: #a9c4b6; cursor: pointer; }
+        .sb-ledger-toggle button.active { background: var(--gold); color: #241d05; border-color: var(--gold); font-weight: 600; }
+
+        .sb-week-nav { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1rem; }
+        .sb-week-nav button { background: var(--felt); border: 1px solid var(--line); color: var(--paper); border-radius: 3px; padding: 0.35rem 0.45rem; cursor: pointer; display: flex; align-items: center; }
+        .sb-week-nav button:disabled { opacity: 0.35; cursor: default; }
+        .sb-week-nav-label { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.04em; color: var(--gold-bright); min-width: 8rem; text-align: center; }
+        .sb-week-select { padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 0.82rem; min-width: 6.5rem; }
+
+        .sb-statement-header { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: #7ea08f; margin-bottom: 0.75rem; }
+        .sb-statement-personal { background: rgba(201, 162, 39, 0.08); border: 1px solid rgba(201, 162, 39, 0.35); border-radius: 4px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+        .sb-statement-personal h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; color: var(--gold-bright); margin: 0 0 0.5rem; letter-spacing: 0.04em; }
+        .sb-statement-line { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; padding: 0.25rem 0; color: #c8ddd2; }
+        .sb-activity-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; }
+        .sb-activity-row:last-child { border-bottom: none; }
+        .sb-activity-title { font-family: 'Inter', sans-serif; font-weight: 500; font-size: 0.82rem; color: var(--paper); margin-bottom: 0.15rem; }
+        .sb-activity-meta { color: #7ea08f; font-size: 0.68rem; }
+        .sb-slips-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem; }
+        .sb-slips-summary { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; letter-spacing: 0.04em; }
+        .sb-season-section { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+        .sb-season-section h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.35rem; }
+        .sb-season-section .sb-note { margin-bottom: 1rem; }
+
+        .sb-setup { max-width: 520px; margin: 3rem auto; padding: 0 1.25rem; }
+        .sb-setup-card { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem 1.4rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+        .sb-setup-card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.04em; }
+        .sb-setup-card p { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #7ea08f; line-height: 1.6; margin: 0 0 1.1rem; }
+        .sb-setup-members { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.75rem 0 1rem; max-height: 220px; overflow-y: auto; }
+        .sb-setup-member { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-radius: 4px; border: 1px solid var(--line); font-family: 'Inter', sans-serif; font-size: 0.85rem; }
+        .sb-setup-member span.sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; }
+        .sb-league-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #9ad6b3; background: rgba(154,214,179,0.1); border: 1px solid rgba(154,214,179,0.25); padding: 0.2rem 0.5rem; border-radius: 3px; }
+
+        .sb-ticket-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; margin-top: 0.25rem; }
+
+        .sb-board-line { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; }
+        .sb-board-line-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.65rem; }
+        .sb-board-line-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--paper); letter-spacing: 0.02em; line-height: 1.15; }
+        .sb-board-line-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 0.2rem; }
+        .sb-board-sides { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+        .sb-board-side { display: flex; align-items: center; gap: 0.45rem; background: var(--paper); color: var(--ink); border-radius: 4px; padding: 0.35rem 0.45rem 0.35rem 0.55rem; }
+        .sb-board-side-label { font-family: 'Inter', sans-serif; font-size: 0.78rem; font-weight: 500; }
+        .sb-board-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; font-weight: 600; color: var(--green); min-width: 2.8rem; }
+        .sb-board-stake { width: 3.2rem; padding: 0.3rem 0.35rem; border: 1px solid #c9bb95; border-radius: 3px; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; background: #fbf6ea; color: var(--ink); }
+        .sb-board-take { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.35rem 0.5rem; border-radius: 3px; border: none; background: var(--gold); color: #241d05; cursor: pointer; font-weight: 600; }
+        .sb-board-take:disabled { opacity: 0.4; cursor: default; }
+        .sb-board-section { margin-bottom: 1.5rem; }
+        .sb-board-section h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }
+        .sb-board-filters { display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: flex-end; background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; margin-bottom: 1rem; }
+        .sb-board-filter { display: flex; flex-direction: column; gap: 0.25rem; min-width: 7.5rem; }
+        .sb-board-filter label { font-family: 'IBM Plex Mono', monospace; font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; color: #7ea08f; }
+        .sb-board-filter select { padding: 0.35rem 0.45rem; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 0.78rem; min-width: 7.5rem; }
+        .sb-board-filter-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+        .sb-board-pill { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.3rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: #9ab5a8; cursor: pointer; }
+        .sb-board-pill.active { background: var(--gold); color: #241d05; border-color: var(--gold); font-weight: 600; }
+        .sb-board-count { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-left: auto; align-self: center; }
+
+        .dk-event { background: var(--felt-dark); border-radius: 8px; margin-bottom: 0.85rem; overflow: hidden; border: 1px solid var(--line); }
+        .dk-event-header { padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.15); }
+        .dk-event-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; font-weight: 400; color: var(--gold-bright); letter-spacing: 0.04em; }
+        .dk-event-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-top: 0.15rem; }
+        .dk-event-markets { padding: 0.35rem 0; }
+        .dk-market { padding: 0.65rem 1rem; border-bottom: 1px solid var(--line); }
+        .dk-market:last-child { border-bottom: none; }
+        .dk-market-head { margin-bottom: 0.55rem; }
+        .dk-market-title { font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600; color: var(--paper); line-height: 1.3; }
+        .dk-market-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #7ea08f; margin-top: 0.15rem; }
+        .dk-odds-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.45rem; }
+        .dk-odds-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; min-height: 3.4rem; padding: 0.45rem 0.5rem; border-radius: 6px; border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: var(--paper); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+        .dk-odds-btn:hover:not(:disabled) { border-color: var(--gold); background: rgba(201, 162, 39, 0.08); }
+        .dk-odds-btn.selected { border-color: var(--gold); background: rgba(201, 162, 39, 0.15); box-shadow: inset 0 0 0 1px var(--gold); }
+        .dk-odds-btn:disabled { opacity: 0.35; cursor: default; }
+        .dk-odds-label { font-size: 0.72rem; font-weight: 600; text-align: center; line-height: 1.2; }
+        .dk-odds-sublabel { font-size: 0.62rem; color: #7ea08f; }
+        .dk-odds-value { font-family: 'IBM Plex Mono', monospace; font-size: 0.88rem; font-weight: 700; color: var(--gold-bright); margin-top: 0.1rem; }
+
+        .dk-betslip { position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; background: var(--felt-dark); border-top: 2px solid var(--line); box-shadow: 0 -8px 24px rgba(0,0,0,0.35); }
+        .dk-betslip-inner { max-width: 880px; margin: 0 auto; padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+        .dk-betslip-pick { flex: 1; min-width: 140px; }
+        .dk-betslip-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold-bright); }
+        .dk-betslip-title { font-size: 0.82rem; font-weight: 600; color: var(--paper); margin-top: 0.1rem; }
+        .dk-betslip-detail { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; }
+        .dk-betslip-actions { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+        .dk-betslip-stake-wrap { display: flex; flex-direction: column; gap: 0.15rem; }
+        .dk-betslip-stake-wrap label { font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #7ea08f; text-transform: uppercase; }
+        .dk-betslip-stake { width: 4.5rem; padding: 0.4rem 0.45rem; border-radius: 4px; border: 1px solid #c9bb95; background: #fbf6ea; color: var(--ink); font-size: 0.85rem; font-weight: 600; }
+        .dk-betslip-payout { display: flex; flex-direction: column; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
+        .dk-betslip-payout strong { font-size: 0.95rem; color: var(--gold-bright); }
+        .dk-betslip-place { padding: 0.65rem 1.1rem; border-radius: 4px; border: none; background: var(--gold); color: #241d05; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; font-weight: 700; cursor: pointer; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.04em; }
+        .dk-betslip-place:hover { background: var(--gold-bright); }
+        .dk-betslip-clear { padding: 0.45rem; border-radius: 4px; border: 1px solid var(--line); background: transparent; color: #7ea08f; cursor: pointer; display: flex; align-items: center; }
+
+        .dk-custom-builder { padding: 0.85rem 1rem 1rem; }
+        .dk-custom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; margin-bottom: 0.75rem; }
+        @media (max-width: 560px) { .dk-custom-row { grid-template-columns: 1fr; } }
+        .dk-custom-field label { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #7ea08f; margin-bottom: 0.3rem; }
+        .dk-custom-field select { width: 100%; padding: 0.5rem 0.55rem; border-radius: 4px; border: 1px solid var(--line); background: rgba(0,0,0,0.2); color: var(--paper); font-size: 0.82rem; }
+        .dk-player-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.35rem; }
+        .dk-player-chip { padding: 0.35rem 0.55rem; border-radius: 999px; border: 1px solid var(--line); background: rgba(0,0,0,0.15); color: #c8ddd2; font-size: 0.72rem; cursor: pointer; }
+        .dk-player-chip.active { border-color: var(--gold); background: rgba(201, 162, 39, 0.15); color: var(--paper); font-weight: 600; }
+        .dk-custom-toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: #a9c4b6; margin-bottom: 0.75rem; cursor: pointer; }
+        .dk-sport-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .dk-sport-chip { padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: rgba(0,0,0,0.15); border: 1px solid var(--line); color: #a9c4b6; cursor: pointer; }
+        .dk-sport-chip.active { background: var(--gold); color: #241d05; border-color: var(--gold); }
+        .sb-board-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0.75rem; }
+        .sb-matchup-header { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .sb-matchup-scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.75rem; align-items: stretch; margin-bottom: 1.25rem; }
+        .sb-matchup-team { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.85rem 1rem; }
+        .sb-matchup-team.you { border-color: var(--gold); }
+        .sb-matchup-team h4 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.03em; }
+        .sb-matchup-total { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #9ad6b3; margin-bottom: 0.65rem; }
+        .sb-matchup-vs { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; color: #7ea08f; display: flex; align-items: center; justify-content: center; }
+        .sb-matchup-player { display: grid; grid-template-columns: 2.2rem 1fr auto auto; gap: 0.35rem 0.5rem; align-items: center; padding: 0.35rem 0.4rem; border-top: 1px solid rgba(63,102,87,0.45); font-size: 0.78rem; width: 100%; border-left: none; border-right: none; border-bottom: none; background: transparent; color: inherit; font-family: inherit; text-align: left; cursor: pointer; border-radius: 4px; transition: background 0.12s, outline 0.12s; }
+        .sb-matchup-player:first-of-type { border-top: none; }
+        .sb-matchup-player:hover { background: rgba(255,255,255,0.04); }
+        .sb-matchup-player.selected { background: rgba(201, 162, 39, 0.12); outline: 1px solid var(--gold); }
+        .sb-matchup-pos { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
+        .sb-matchup-name { font-weight: 500; }
+        .sb-matchup-meta { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; color: #7ea08f; }
+        .sb-matchup-proj { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #c9e8d4; min-width: 2.8rem; text-align: right; }
+        .sb-matchup-actual { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--gold-bright); min-width: 2.8rem; text-align: right; }
+        .sb-matchup-bets h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; color: var(--gold-bright); letter-spacing: 0.05em; margin: 0 0 0.65rem; }
+      `), !leagueReady && /*#__PURE__*/React.createElement("div", {
+    className: "sb-setup"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-setup-card"
+  }, /*#__PURE__*/React.createElement("h2", null, "Link Your League"), members.length === 0 ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", null, "Connect your Sleeper league to pull in every manager automatically. Your league stays linked all season \u2014 bets, balances, and rosters are saved on this device."), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      color: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      color: "#a9c4b6"
+    }
+  }, "Sleeper league ID"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "e.g. 987654321012345678",
+    value: league.inputId,
+    onChange: e => setLeague(s => ({
+      ...s,
+      inputId: e.target.value,
+      error: null
+    })),
+    style: {
+      background: "#0e211b",
+      color: "var(--paper)",
+      borderColor: "var(--line)"
+    }
+  })), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note",
+    style: {
+      marginTop: "-0.35rem"
+    }
+  }, "Find it in the Sleeper app URL or league settings. No login required."), /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-submit",
+    onClick: () => connectLeague(league.inputId),
+    disabled: league.loading || !league.inputId.trim()
+  }, /*#__PURE__*/React.createElement(Link2, {
+    size: 12
+  }), " ", league.loading ? "Connecting…" : "Connect league"))) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("p", null, /*#__PURE__*/React.createElement("span", {
+    className: "sb-league-badge"
+  }, "Connected"), " ", league.leagueName, " \xB7 ", members.length, " managers"), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      color: "var(--paper)"
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      color: "#a9c4b6"
+    }
+  }, "Who are you?"), /*#__PURE__*/React.createElement("select", {
+    className: "sb-viewer-select",
+    style: {
+      width: "100%",
+      padding: "0.55rem 0.6rem"
+    },
+    value: setupViewer,
+    onChange: e => setSetupViewer(e.target.value)
+  }, members.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
+  }, m.name, m.teamName ? ` (${m.displayName})` : "")))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-setup-members"
+  }, members.map(m => /*#__PURE__*/React.createElement("div", {
+    className: "sb-setup-member",
+    key: m.id
+  }, /*#__PURE__*/React.createElement(Users, {
+    size: 14,
+    color: "#7ea08f"
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", null, m.name), m.teamName && /*#__PURE__*/React.createElement("span", {
+    className: "sub"
+  }, m.displayName))))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-submit",
+    onClick: finishSetup,
+    disabled: !setupViewer
+  }, /*#__PURE__*/React.createElement(Check, {
+    size: 12
+  }), " Enter the book"), /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-cancel",
+    style: {
+      color: "#a9c4b6",
+      borderColor: "var(--line)"
+    },
+    onClick: () => {
+      setMembers([]);
+      setLeague(s => ({
+        ...s,
+        inputId: "",
+        error: null
+      }));
+    }
+  }, "Back"))), league.error && /*#__PURE__*/React.createElement("div", {
+    className: "sb-error-banner",
+    style: {
+      marginTop: "0.75rem"
+    }
+  }, /*#__PURE__*/React.createElement(AlertTriangle, {
+    size: 12
+  }), " ", league.error))), leagueReady && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-marquee"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center justify-between flex-wrap gap-3"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-marquee-title sb-display"
+  }, "League Sportsbook"), /*#__PURE__*/React.createElement("div", {
+    className: "sb-marquee-sub"
+  }, league.leagueName, " \xB7 ", league.season, " Regular Season \xB7 Week ", currentWeek, league.nflSeasonType && league.nflSeasonType !== "regular" ? ` · NFL ${league.nflSeasonType}` : "", " · ", BUILD_STAMP)), /*#__PURE__*/React.createElement("div", {
+    className: "flex items-center gap-2"
+  }, /*#__PURE__*/React.createElement(Users, {
+    size: 14,
+    color: "#a9c4b6"
+  }), /*#__PURE__*/React.createElement("span", {
+    className: "sb-marquee-sub",
+    style: {
+      color: "#a9c4b6"
+    }
+  }, "viewing as"), /*#__PURE__*/React.createElement("select", {
+    className: "sb-viewer-select",
+    value: viewer,
+    onChange: e => setViewer(e.target.value)
+  }, members.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
+  }, m.name)))))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-tabs"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: `sb-tab ${tab === "board" ? "active" : ""}`,
+    onClick: () => setTab("board")
+  }, /*#__PURE__*/React.createElement(TrendingUp, {
+    size: 16
+  }), " Board"), /*#__PURE__*/React.createElement("button", {
+    className: `sb-tab ${tab === "matchup" ? "active" : ""}`,
+    onClick: () => setTab("matchup")
+  }, /*#__PURE__*/React.createElement(Swords, {
+    size: 16
+  }), " Matchup"), /*#__PURE__*/React.createElement("button", {
+    className: `sb-tab ${tab === "slips" ? "active" : ""}`,
+    onClick: () => setTab("slips")
+  }, /*#__PURE__*/React.createElement(ScrollText, {
+    size: 16
+  }), " Bet Slips"), /*#__PURE__*/React.createElement("button", {
+    className: `sb-tab ${tab === "ledger" ? "active" : ""}`,
+    onClick: () => setTab("ledger")
+  }, /*#__PURE__*/React.createElement(Trophy, {
+    size: 16
+  }), " Ledger"), /*#__PURE__*/React.createElement("button", {
+    className: `sb-tab ${tab === "sync" ? "active" : ""}`,
+    onClick: () => setTab("sync")
+  }, /*#__PURE__*/React.createElement(Link2, {
+    size: 16
+  }), " League"), /*#__PURE__*/React.createElement("button", {
+    className: "sb-newbet-btn",
+    onClick: () => {
+      if (!showForm) setForm(f => ({
+        ...f,
+        week: activeWeek
+      }));
+      setShowForm(s => !s);
+    }
+  }, /*#__PURE__*/React.createElement(Plus, {
+    size: 13
+  }), " New Bet")), /*#__PURE__*/React.createElement("div", {
+    className: "sb-content"
+  }, showForm && /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-panel"
+  }, /*#__PURE__*/React.createElement("h3", null, "Write a Slip"), /*#__PURE__*/React.createElement("form", {
+    onSubmit: submitBet
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Bet type"), /*#__PURE__*/React.createElement("select", {
+    value: form.type,
+    onChange: e => setForm({
+      ...form,
+      type: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "matchup"
+  }, "Matchup"), /*#__PURE__*/React.createElement("option", {
+    value: "prop"
+  }, "Player Prop"), /*#__PURE__*/React.createElement("option", {
+    value: "season"
+  }, "Season Future"), /*#__PURE__*/React.createElement("option", {
+    value: "proposition"
+  }, "League Prop"))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Against"), /*#__PURE__*/React.createElement("select", {
+    value: form.opponent,
+    onChange: e => setForm({
+      ...form,
+      opponent: e.target.value
+    })
+  }, members.filter(m => m.id !== viewer).map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
+  }, m.name)))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      maxWidth: 110
+    }
+  }, /*#__PURE__*/React.createElement("label", null, "Stake ($)"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "1",
+    value: form.stake,
+    onChange: e => setForm({
+      ...form,
+      stake: e.target.value
+    })
+  })), isWeeklyBet(form.type) && /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      maxWidth: 90
+    }
+  }, /*#__PURE__*/React.createElement("label", null, "Week"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "1",
+    max: currentWeek,
+    value: form.week,
+    onChange: e => setForm({
+      ...form,
+      week: e.target.value
+    })
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Terms \u2014 what settles this bet"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "e.g. \"My RB1 outscores yours this week\"",
+    value: form.title,
+    onChange: e => setForm({
+      ...form,
+      title: e.target.value
+    })
+  })), form.type === "prop" && /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Sleeper player ID"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "e.g. 4046",
+    value: form.playerId,
+    onChange: e => setForm({
+      ...form,
+      playerId: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      maxWidth: 110
+    }
+  }, /*#__PURE__*/React.createElement("label", null, "Line"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    step: "0.5",
+    placeholder: "18.5",
+    value: form.line,
+    onChange: e => setForm({
+      ...form,
+      line: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      maxWidth: 140
+    }
+  }, /*#__PURE__*/React.createElement("label", null, "You take"), /*#__PURE__*/React.createElement("select", {
+    value: form.creatorSide,
+    onChange: e => setForm({
+      ...form,
+      creatorSide: e.target.value
+    })
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "over"
+  }, "Over"), /*#__PURE__*/React.createElement("option", {
+    value: "under"
+  }, "Under")))), form.type === "prop" && /*#__PURE__*/React.createElement("p", {
+    className: "sb-note",
+    style: {
+      color: "#6b6144",
+      marginTop: "-0.4rem"
+    }
+  }, "Fill in the player ID and line to make this slip auto-gradable from Sleeper. Leave blank to grade it by hand instead."), /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    className: "sb-btn sb-btn-submit"
+  }, "Post slip"), /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    className: "sb-btn sb-btn-cancel",
+    onClick: () => setShowForm(false)
+  }, "Cancel")))), tab === "board" && /*#__PURE__*/React.createElement("div", null, renderWeekNav(/*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-auto",
+    onClick: () => loadBoardData(activeWeek),
+    disabled: league.loading
+  }, /*#__PURE__*/React.createElement(RefreshCw, {
+    size: 12
+  }), " ", league.loading ? "Loading…" : "Refresh lines")), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note",
+    style: {
+      marginBottom: "0.85rem",
+      color: "#7ea08f"
+    }
+  }, "Tap a line to add it to your bet slip. Lines use Sleeper PPR projections."), /*#__PURE__*/React.createElement("div", {
+    className: "dk-sport-chips"
+  }, [{
+    id: "all",
+    label: "All Markets"
+  }, {
+    id: "props",
+    label: "Player Props"
+  }, {
+    id: "lineups",
+    label: "Lineups"
+  }, {
+    id: "matchups",
+    label: "H2H"
+  }, {
+    id: "battles",
+    label: "Player Battles"
+  }].map(opt => /*#__PURE__*/React.createElement("button", {
+    key: opt.id,
+    type: "button",
+    className: `dk-sport-chip${boardCategory === opt.id ? " active" : ""}`,
+    onClick: () => setBoardCategory(opt.id)
+  }, opt.label))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board-filters",
+    style: {
+      marginBottom: "0.85rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-board-filter"
+  }, /*#__PURE__*/React.createElement("label", null, "Fantasy team"), /*#__PURE__*/React.createElement("select", {
+    value: boardFantasyTeam,
+    onChange: e => setBoardFantasyTeam(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "All teams"), members.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
+  }, m.name)))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board-filter"
+  }, /*#__PURE__*/React.createElement("label", null, "Position"), /*#__PURE__*/React.createElement("select", {
+    value: boardPosition,
+    onChange: e => setBoardPosition(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "All positions"), ["QB", "RB", "WR", "TE"].map(pos => /*#__PURE__*/React.createElement("option", {
+    key: pos,
+    value: pos
+  }, pos)))), boardNflTeams.length > 0 && boardCategory !== "battles" && /*#__PURE__*/React.createElement("div", {
+    className: "sb-board-filter"
+  }, /*#__PURE__*/React.createElement("label", null, "NFL team"), /*#__PURE__*/React.createElement("select", {
+    value: boardNflTeam,
+    onChange: e => setBoardNflTeam(e.target.value)
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "all"
+  }, "All NFL teams"), boardNflTeams.map(t => /*#__PURE__*/React.createElement("option", {
+    key: t,
+    value: t
+  }, t))))), boardCategory === "battles" && /*#__PURE__*/React.createElement("div", {
+    className: "dk-event",
+    style: {
+      marginBottom: "1rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-title"
+  }, "Build a Player Battle"), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-sub"
+  }, "Your starter vs any starter on another fantasy team \u2014 e.g. your WR1 vs their WR1")), /*#__PURE__*/React.createElement("div", {
+    className: "dk-custom-builder"
+  }, /*#__PURE__*/React.createElement("label", {
+    className: "dk-custom-toggle"
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "checkbox",
+    checked: customMatchPos,
+    onChange: e => {
+      setCustomMatchPos(e.target.checked);
+      setCustomH2H(h => ({
+        ...h,
+        oppPlayerId: ""
+      }));
+    }
+  }), "Match same position only"), /*#__PURE__*/React.createElement("div", {
+    className: "dk-custom-row"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-custom-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Your player"), /*#__PURE__*/React.createElement("select", {
+    value: customH2H.myPlayerId,
+    onChange: e => setCustomH2H(h => ({
+      ...h,
+      myPlayerId: e.target.value,
+      oppPlayerId: ""
+    }))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select your starter\u2026"), myStarterPicks.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.name, " (", p.position, ") \xB7 ", formatProj(p.proj), " proj"))), /*#__PURE__*/React.createElement("div", {
+    className: "dk-player-chips"
+  }, myStarterPicks.map(p => /*#__PURE__*/React.createElement("button", {
+    key: p.id,
+    type: "button",
+    className: `dk-player-chip${customH2H.myPlayerId === p.id ? " active" : ""}`,
+    onClick: () => setCustomH2H(h => ({
+      ...h,
+      myPlayerId: p.id,
+      oppPlayerId: ""
+    }))
+  }, p.position, " ", p.name)))), /*#__PURE__*/React.createElement("div", {
+    className: "dk-custom-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Opponent\u2019s team"), /*#__PURE__*/React.createElement("select", {
+    value: customH2H.oppMemberId,
+    onChange: e => setCustomH2H(h => ({
+      ...h,
+      oppMemberId: e.target.value,
+      oppPlayerId: ""
+    }))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select fantasy team\u2026"), members.filter(m => m.id !== viewer).map(m => /*#__PURE__*/React.createElement("option", {
+    key: m.id,
+    value: m.id
+  }, m.name))))), customH2H.oppMemberId && /*#__PURE__*/React.createElement("div", {
+    className: "dk-custom-field"
+  }, /*#__PURE__*/React.createElement("label", null, "Their player", customMatchPos && myPlayerMeta?.position ? ` (${myPlayerMeta.position})` : ""), /*#__PURE__*/React.createElement("select", {
+    value: customH2H.oppPlayerId,
+    onChange: e => setCustomH2H(h => ({
+      ...h,
+      oppPlayerId: e.target.value
+    }))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select their starter\u2026"), oppStarterPicks.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.name, " (", p.position, ") \xB7 ", formatProj(p.proj), " proj"))), /*#__PURE__*/React.createElement("div", {
+    className: "dk-player-chips"
+  }, oppStarterPicks.map(p => /*#__PURE__*/React.createElement("button", {
+    key: p.id,
+    type: "button",
+    className: `dk-player-chip${customH2H.oppPlayerId === p.id ? " active" : ""}`,
+    onClick: () => setCustomH2H(h => ({
+      ...h,
+      oppPlayerId: p.id
+    }))
+  }, p.position, " ", p.name)))), customH2hOffering ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: "0.75rem"
+    }
+  }, renderMarketRow(customH2hOffering)) : /*#__PURE__*/React.createElement("p", {
+    className: "sb-note",
+    style: {
+      color: "#7ea08f",
+      margin: "0.5rem 0 0"
+    }
+  }, "Pick both players to see odds and place your battle bet."))), boardCategory !== "battles" && (() => {
+    const hasLines = boardOfferings.length > 0;
+    const hasFiltered = filteredBoardOfferings.length > 0;
+    return /*#__PURE__*/React.createElement(React.Fragment, null, !hasLines && /*#__PURE__*/React.createElement("div", {
+      className: "sb-board"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "sb-empty"
+    }, league.loading ? "Loading Sleeper projections and matchup lines…" : "No lines yet — refresh league on the League tab, then hit Refresh lines here.")), hasLines && !hasFiltered && /*#__PURE__*/React.createElement("div", {
+      className: "sb-board"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "sb-empty"
+    }, "No lines match your filters.")), boardEvents.map(ev => renderEventCard(ev.title, ev.subtitle, ev.markets.map(renderMarketRow), ev.id)));
+  })()), tab === "matchup" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-matchup-header"
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    className: "sb-display",
+    style: {
+      fontSize: "1.5rem",
+      color: "var(--gold-bright)",
+      margin: 0
+    }
+  }, "Week ", matchupWeek, " Matchup"), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note",
+    style: {
+      margin: "0.35rem 0 0",
+      color: "#7ea08f"
+    }
+  }, "Tap a starter for their O/U line, or pick one from each side for a head-to-head bet.")), /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-auto",
+    onClick: () => loadBoardData(matchupWeek),
+    disabled: league.loading
+  }, /*#__PURE__*/React.createElement(RefreshCw, {
+    size: 12
+  }), " ", league.loading ? "Loading…" : "Refresh")), league.loading && !matchupDataReady ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty"
+  }, "Loading your matchup and Sleeper PPR projections\u2026")) : !matchupOpponent ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty"
+  }, "No fantasy matchup found for week ", matchupWeek, ". Refresh league data or check back when the schedule is set.")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-matchup-scoreboard"
+  }, renderStarterColumn(viewerMember, myStarterRows, myLineupProj, true), /*#__PURE__*/React.createElement("div", {
+    className: "sb-matchup-vs"
+  }, "VS"), renderStarterColumn(matchupOpponent, oppStarterRows, oppLineupProj, false)), matchupBetOffering && /*#__PURE__*/React.createElement("div", {
+    className: "dk-event",
+    style: {
+      marginBottom: "1rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-title"
+  }, matchupPlayerPick.my && matchupPlayerPick.opp ? "Player Battle" : "Player Prop"), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-sub"
+  }, matchupPlayerPick.my && matchupPlayerPick.opp ? "Your pick vs opponent — tap a side to bet" : "Tap Over or Under to add to your bet slip")), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-markets"
+  }, renderMarketRow(matchupBetOffering))), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event",
+    style: {
+      marginTop: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-header"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-title"
+  }, "Bet This Matchup"), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-sub"
+  }, "vs ", matchupOpponent.name, " \xB7 Week ", matchupWeek)), /*#__PURE__*/React.createElement("div", {
+    className: "dk-event-markets"
+  }, matchupOfferings.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty",
+    style: {
+      padding: "1rem"
+    }
+  }, "No bet lines available yet.") : matchupOfferings.map(renderMarketRow))))), tab === "slips" && /*#__PURE__*/React.createElement("div", null, renderWeekNav(/*#__PURE__*/React.createElement("div", {
+    className: "sb-slips-summary"
+  }, weekSlipSummary.total === 0 ? "No slips this week" : `${weekSlipSummary.total} slip${weekSlipSummary.total !== 1 ? "s" : ""} · ${weekSlipSummary.open} open · $${weekSlipSummary.stake} on the board`)), weekBets.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty"
+  }, "No bet slips for week ", activeWeek, " yet. Post one with the + New Bet button.")) : weekBets.map(renderBetSlip), seasonBets.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "sb-season-section"
+  }, /*#__PURE__*/React.createElement("h3", null, "Season Board"), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note"
+  }, "Long-running futures that aren\u2019t tied to a single week."), seasonBets.map(renderBetSlip))), tab === "ledger" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-ledger-toggle"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: ledgerView === "weekly" ? "active" : "",
+    onClick: () => setLedgerView("weekly")
+  }, /*#__PURE__*/React.createElement(CalendarDays, {
+    size: 12,
+    style: {
+      display: "inline",
+      verticalAlign: "-2px",
+      marginRight: "0.3rem"
+    }
+  }), "Weekly Statement"), /*#__PURE__*/React.createElement("button", {
+    className: ledgerView === "season" ? "active" : "",
+    onClick: () => setLedgerView("season")
+  }, /*#__PURE__*/React.createElement(Trophy, {
+    size: 12,
+    style: {
+      display: "inline",
+      verticalAlign: "-2px",
+      marginRight: "0.3rem"
+    }
+  }), "Season Totals")), ledgerView === "weekly" && /*#__PURE__*/React.createElement(React.Fragment, null, renderWeekNav(), /*#__PURE__*/React.createElement("div", {
+    className: "sb-statement-personal"
+  }, /*#__PURE__*/React.createElement("h4", null, nameOf(viewer), "\u2019s Week ", activeWeek, " Statement"), viewerStatement.net === 0 && viewerStatement.owes.length === 0 && viewerStatement.owed.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-statement-line"
+  }, "No settled action this week \u2014 you\u2019re even.") : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-statement-line",
+    style: {
+      marginBottom: "0.35rem"
+    }
+  }, "Net this week:", " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: viewerStatement.net >= 0 ? "#9ad6b3" : "#e0949a",
+      fontWeight: 600
+    }
+  }, viewerStatement.net >= 0 ? "+" : "-", "$", Math.abs(viewerStatement.net))), viewerStatement.owed.map((p, i) => /*#__PURE__*/React.createElement("div", {
+    className: "sb-statement-line",
+    key: `owed-${i}`
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#9ad6b3"
+    }
+  }, nameOf(p.from)), " owes you", " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--gold-bright)"
+    }
+  }, "$", p.amount))), viewerStatement.owes.map((p, i) => /*#__PURE__*/React.createElement("div", {
+    className: "sb-statement-line",
+    key: `owes-${i}`
+  }, "You owe ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#e0949a"
+    }
+  }, nameOf(p.to)), " ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "var(--gold-bright)"
+    }
+  }, "$", p.amount))))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, "Week ", activeWeek, " Settlements"), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note"
+  }, "Who pays whom for slips graded this week \u2014 settle up before the next slate."), weeklyLedger.pairs.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty"
+  }, "No graded slips for week ", activeWeek, " yet.") : weeklyLedger.pairs.map((p, i) => /*#__PURE__*/React.createElement("div", {
+    className: "sb-owe-row",
+    key: i
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#e0949a"
+    }
+  }, nameOf(p.from)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 0.6
+    }
+  }, "owes"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#9ad6b3"
+    }
+  }, nameOf(p.to)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: "auto",
+      color: "var(--gold-bright)"
+    }
+  }, "$", p.amount)))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, "Week ", activeWeek, " Standings"), members.slice().sort((a, b) => weeklyLedger.totals[b.id] - weeklyLedger.totals[a.id]).map(m => /*#__PURE__*/React.createElement("div", {
+    className: "sb-standing-row",
+    key: m.id
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "sb-standing-name"
+  }, m.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: weeklyLedger.totals[m.id] >= 0 ? "#9ad6b3" : "#e0949a"
+    }
+  }, weeklyLedger.totals[m.id] === 0 ? "even" : `${weeklyLedger.totals[m.id] >= 0 ? "+" : "-"}$${Math.abs(weeklyLedger.totals[m.id])}`)))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, "Graded Slips \u2014 Week ", activeWeek), weeklyLedger.settled.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty"
+  }, "Nothing graded yet for this week.") : weeklyLedger.settled.map(b => {
+    const winner = b.result === "creator" ? b.creator : b.opponent;
+    const loser = b.result === "creator" ? b.opponent : b.creator;
+    return /*#__PURE__*/React.createElement("div", {
+      className: "sb-activity-row",
+      key: b.id
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      className: "sb-activity-title"
+    }, b.title), /*#__PURE__*/React.createElement("div", {
+      className: "sb-activity-meta"
+    }, nameOf(b.creator), " vs ", nameOf(b.opponent), " \xB7 ticket #", b.ticket)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        textAlign: "right",
+        whiteSpace: "nowrap"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: "#9ad6b3"
+      }
+    }, nameOf(winner), " +$", b.stake), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: "#e0949a",
+        fontSize: "0.68rem"
+      }
+    }, nameOf(loser), " pays")));
+  }))), ledgerView === "season" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, "Season Standings (net $)"), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note"
+  }, "Running total across all graded slips, including season futures when they settle."), members.slice().sort((a, b) => ledger.totals[b.id] - ledger.totals[a.id]).map(m => /*#__PURE__*/React.createElement("div", {
+    className: "sb-standing-row",
+    key: m.id
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "sb-standing-name"
+  }, m.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: ledger.totals[m.id] >= 0 ? "#9ad6b3" : "#e0949a"
+    }
+  }, ledger.totals[m.id] >= 0 ? "+" : "-", "$", Math.abs(ledger.totals[m.id]))))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, "Season Settlements"), ledger.pairs.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    className: "sb-empty"
+  }, "Nothing outstanding \u2014 grade some slips to see balances settle here.") : ledger.pairs.map((p, i) => /*#__PURE__*/React.createElement("div", {
+    className: "sb-owe-row",
+    key: i
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#e0949a"
+    }
+  }, nameOf(p.from)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      opacity: 0.6
+    }
+  }, "owes"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#9ad6b3"
+    }
+  }, nameOf(p.to)), /*#__PURE__*/React.createElement("span", {
+    style: {
+      marginLeft: "auto",
+      color: "var(--gold-bright)"
+    }
+  }, "$", p.amount)))))), tab === "sync" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, league.leagueName), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note"
+  }, "Linked to Sleeper league ", /*#__PURE__*/React.createElement("span", {
+    className: "sb-mono"
+  }, league.leagueId), ". Manager names sync from Sleeper and stay linked all season on this device."), /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-row",
+    style: {
+      marginBottom: "0.6rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      maxWidth: 120
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: {
+      color: "#a9c4b6"
+    }
+  }, "Score week"), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "1",
+    max: REGULAR_SEASON_WEEKS,
+    value: scoreLoadWeek,
+    onChange: e => setScoreLoadWeek(e.target.value),
+    style: {
+      background: "#0e211b",
+      color: "var(--paper)",
+      borderColor: "var(--line)"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "sb-field",
+    style: {
+      alignSelf: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("p", {
+    className: "sb-note",
+    style: {
+      margin: 0,
+      color: "#7ea08f"
+    }
+  }, "Current regular season week: ", /*#__PURE__*/React.createElement("strong", null, currentWeek)))), /*#__PURE__*/React.createElement("div", {
+    className: "sb-form-actions"
+  }, /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-submit",
+    onClick: refreshLeague,
+    disabled: league.loading
+  }, /*#__PURE__*/React.createElement(RefreshCw, {
+    size: 12
+  }), " ", league.loading ? "Syncing…" : "Refresh league"), /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-auto",
+    onClick: loadWeek,
+    disabled: league.loading
+  }, /*#__PURE__*/React.createElement(Zap, {
+    size: 12
+  }), " Load week ", scoreLoadWeek, " scores"), /*#__PURE__*/React.createElement("button", {
+    className: "sb-btn sb-btn-decline",
+    onClick: disconnectLeague
+  }, "Disconnect")), league.error && /*#__PURE__*/React.createElement("div", {
+    className: "sb-error-banner"
+  }, /*#__PURE__*/React.createElement(AlertTriangle, {
+    size: 12
+  }), " ", league.error)), /*#__PURE__*/React.createElement("div", {
+    className: "sb-board"
+  }, /*#__PURE__*/React.createElement("h3", null, "League Managers"), /*#__PURE__*/React.createElement("p", {
+    className: "sb-note"
+  }, "Rosters pulled from Sleeper \u2014 used for auto-grading matchup bets."), members.map(m => /*#__PURE__*/React.createElement("div", {
+    className: "sb-sync-row",
+    key: m.id
+  }, /*#__PURE__*/React.createElement("span", {
+    className: "sb-standing-name"
+  }, m.name), m.teamName && /*#__PURE__*/React.createElement("span", {
+    className: "sb-mono",
+    style: {
+      fontSize: "0.68rem",
+      color: "#7ea08f"
+    }
+  }, m.displayName), weekLoaded && m.rosterId && weekData[m.rosterId] && /*#__PURE__*/React.createElement("span", {
+    className: "sb-week-points"
+  }, weekData[m.rosterId].points, " pts (wk ", league.week, ")"))))))), renderBetSlipBar());
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(LeagueSportsbook));
+  </script>
+</body>
+</html>
