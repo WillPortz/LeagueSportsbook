@@ -4,10 +4,10 @@
 
 import {
   DEMO_USER_ID, DEMO_LEAGUE_DB_ID, DEMO_SLEEPER_LEAGUE_ID, DEMO_CURRENT_WEEK, DEMO_SEASON,
-  DEMO_MEMBERS, DEMO_SEED_BETS, otherManagerId,
+  DEMO_MEMBERS, DEMO_SEED_BETS, DEMO_SEED_POOL_ENTRIES, DEMO_SEED_POOL_PICKS, otherManagerId,
 } from "./demoData.js";
 
-const DEMO_LEAGUE_ROW = {
+let demoLeagueRow = {
   id: DEMO_LEAGUE_DB_ID,
   sleeper_league_id: DEMO_SLEEPER_LEAGUE_ID,
   name: "Demo League",
@@ -17,6 +17,7 @@ const DEMO_LEAGUE_ROW = {
   scoring_label: "PPR",
   projection_season: DEMO_SEASON,
   current_week: DEMO_CURRENT_WEEK,
+  pool_entry_fee: 5,
 };
 
 function makePubSub() {
@@ -38,8 +39,9 @@ const memberBus = makePubSub();
 const betBus = makePubSub();
 
 export const demoLeaguesApi = {
-  async upsertLeague() {
-    return DEMO_LEAGUE_ROW;
+  async upsertLeague(_sleeperLeagueId, fields = {}) {
+    demoLeagueRow = { ...demoLeagueRow, ...fields };
+    return demoLeagueRow;
   },
 };
 
@@ -55,7 +57,7 @@ export const demoMembersApi = {
   },
   async findMyMembership(userId) {
     if (userId !== DEMO_USER_ID) return null;
-    return { leagues: DEMO_LEAGUE_ROW };
+    return { leagues: demoLeagueRow };
   },
   async claimMember(memberDbId) {
     const row = memberRows.find((m) => m.dbId === memberDbId);
@@ -114,5 +116,62 @@ export const demoBetsApi = {
     const updated = { ...old, ...patch };
     betRows = betRows.map((b) => (b.id === betDbId ? updated : b));
     betBus.notify({ eventType: "UPDATE", new: updated, old });
+  },
+};
+
+let poolEntryRows = DEMO_SEED_POOL_ENTRIES.map((e) => ({ ...e }));
+let poolPickRows = DEMO_SEED_POOL_PICKS.map((p) => ({ ...p }));
+const poolEntryBus = makePubSub();
+const poolPickBus = makePubSub();
+let demoPoolSeq = 3000;
+
+export const demoPoolApi = {
+  dbRowToEntry(row) {
+    return row;
+  },
+  dbRowToPick(row) {
+    return row;
+  },
+  async fetchEntries() {
+    return poolEntryRows.map((e) => ({ ...e }));
+  },
+  async fetchPicks() {
+    return poolPickRows.map((p) => ({ ...p }));
+  },
+  subscribeToEntries(_leagueId, onChange) {
+    return poolEntryBus.subscribe(onChange);
+  },
+  subscribeToPicks(_leagueId, onChange) {
+    return poolPickBus.subscribe(onChange);
+  },
+  async submitPicks(_leagueId, week, memberDbId, picksByQuestion) {
+    let entry = poolEntryRows.find((e) => e.week === week && e.memberId === memberDbId);
+    if (!entry) {
+      demoPoolSeq += 1;
+      entry = { id: `demo-pool-entry-${demoPoolSeq}`, week, memberId: memberDbId, paid: false };
+      poolEntryRows = [...poolEntryRows, entry];
+      poolEntryBus.notify({ eventType: "INSERT", new: entry, old: null });
+    }
+
+    Object.entries(picksByQuestion).forEach(([questionKey, pickMemberId]) => {
+      const old = poolPickRows.find((p) => p.week === week && p.memberId === memberDbId && p.questionKey === questionKey);
+      if (old) {
+        const updated = { ...old, pickMemberId };
+        poolPickRows = poolPickRows.map((p) => (p.id === old.id ? updated : p));
+        poolPickBus.notify({ eventType: "UPDATE", new: updated, old });
+      } else {
+        demoPoolSeq += 1;
+        const row = { id: `demo-pool-pick-${demoPoolSeq}`, week, memberId: memberDbId, questionKey, pickMemberId };
+        poolPickRows = [...poolPickRows, row];
+        poolPickBus.notify({ eventType: "INSERT", new: row, old: null });
+      }
+    });
+  },
+  async setPaid(entryId, paid) {
+    const old = poolEntryRows.find((e) => e.id === entryId);
+    if (!old) return;
+    const updated = { ...old, paid };
+    poolEntryRows = poolEntryRows.map((e) => (e.id === entryId ? updated : e));
+    poolEntryBus.notify({ eventType: "UPDATE", new: updated, old });
   },
 };

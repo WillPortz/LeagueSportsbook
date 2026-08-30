@@ -68,8 +68,13 @@ function addPlayer(name, position, team) {
   return id;
 }
 
+const PREV_WEEK = DEMO_CURRENT_WEEK - 1;
+const rand2 = mulberry32(19700101);
+const jitter2 = (base, spread) => Math.round((base + (rand2() * 2 - 1) * spread) * 10) / 10;
+
 const members = [];
-const weekMatchups = {};
+const weekMatchupsCurrent = {};   // this week — pregame, no actuals yet, so pool picks stay open
+const weekMatchupsPrev = {};      // last week — fully played, used to demo a graded pool + ledger
 const weekProjections = {};
 
 MANAGERS.forEach((m, i) => {
@@ -104,24 +109,40 @@ MANAGERS.forEach((m, i) => {
   };
   Object.entries(proj).forEach(([pid, val]) => { weekProjections[pid] = Math.max(1, val); });
 
+  // last week's per-player actuals (real Sleeper matchup rows score every rostered player, not
+  // just starters) — this is the only week with results, so it's what the pool leaderboard grades
+  const prevActual = {};
+  Object.entries(proj).forEach(([pid, val]) => {
+    prevActual[pid] = Math.max(0, Math.round(jitter2(val, val * 0.4) * 10) / 10);
+  });
+  const prevLineupActual = starters.reduce((sum, pid) => sum + prevActual[pid], 0);
+
   members.push({
     id, dbId: id, userId: m.first === "Will" ? DEMO_USER_ID : null,
     rosterId, name: m.team, displayName: m.first, teamName: m.team,
     seasonPts, wins, losses, gamesPlayed: wins + losses, starters,
   });
 
-  weekMatchups[rosterId] = {
+  const matchupId = Math.floor(i / 2) + 1;
+  weekMatchupsCurrent[rosterId] = {
+    roster_id: rosterId, matchup_id: matchupId, starters, players: roster, points: 0,
+  };
+  weekMatchupsPrev[rosterId] = {
     roster_id: rosterId,
-    matchup_id: Math.floor(i / 2) + 1,
+    matchup_id: matchupId,
     starters,
     players: roster,
-    points: Math.max(0, Math.round(starters.reduce((sum, pid) => sum + weekProjections[pid], 0) * jitter(1, 0.18) * 10) / 10),
+    points: Math.round(prevLineupActual * 10) / 10,
+    players_points: prevActual,
   };
 });
 
 export const DEMO_MEMBERS = members;
 export const DEMO_PLAYERS = players;
-export const DEMO_WEEK_CACHE = { [DEMO_CURRENT_WEEK]: { matchups: weekMatchups, projections: weekProjections } };
+export const DEMO_WEEK_CACHE = {
+  [DEMO_CURRENT_WEEK]: { matchups: weekMatchupsCurrent, projections: weekProjections },
+  [PREV_WEEK]: { matchups: weekMatchupsPrev, projections: weekProjections },
+};
 export const DEMO_PLAYOFF_TEAMS = 6;
 
 const byName = Object.fromEntries(members.map((m) => [m.displayName, m]));
@@ -201,3 +222,29 @@ export function otherManagerId(excludeId) {
   const pool = members.filter((m) => m.id !== excludeId);
   return pool[Math.floor(rand() * pool.length)].id;
 }
+
+// ---------- seed weekly pool entries/picks — everyone but the demo viewer has already played ----------
+export const POOL_QUESTION_KEYS = [
+  "weekly_high", "weekly_low", "matchup_winner", "biggest_blowout", "closest_matchup",
+  "highest_player", "most_bench", "best_overperform", "biggest_upset",
+];
+
+const poolEntries = [];
+const poolPicks = [];
+let poolPickSeq = 0;
+["jake", "mike", "sam", "alex", "nick", "tyler"].forEach((mid, idx) => {
+  poolEntries.push({ id: `demo-pool-entry-${mid}`, week: PREV_WEEK, memberId: mid, paid: idx < 5 });
+  POOL_QUESTION_KEYS.forEach((qKey) => {
+    poolPickSeq += 1;
+    poolPicks.push({
+      id: `demo-pool-pick-${poolPickSeq}`,
+      week: PREV_WEEK,
+      memberId: mid,
+      questionKey: qKey,
+      pickMemberId: otherManagerId(mid),
+    });
+  });
+});
+
+export const DEMO_SEED_POOL_ENTRIES = poolEntries;
+export const DEMO_SEED_POOL_PICKS = poolPicks;

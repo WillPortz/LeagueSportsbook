@@ -15,6 +15,7 @@ create table if not exists leagues (
   projection_season int not null default extract(year from now())::int,
   current_week int not null default 1,
   ticket_seq int not null default 1000,   -- next ticket number = ticket_seq + 1 (mirrors old TICKET_SEQ=1001)
+  pool_entry_fee numeric not null default 5,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
@@ -79,6 +80,35 @@ create table if not exists bets (
 create index if not exists bets_league_idx   on bets (league_id);
 create index if not exists bets_creator_idx  on bets (creator);
 create index if not exists bets_opponent_idx on bets (opponent);
+
+-- ============ weekly league pool ============
+-- One shared, whole-league trivia pool per week: everyone answers the same nine questions
+-- about that week's actual fantasy results; grading happens client-side from data already
+-- fetched (weekCache), so these tables only need to hold picks and who's paid in.
+create table if not exists pool_entries (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references leagues(id) on delete cascade,
+  week int not null,
+  member_id uuid not null references members(id),
+  paid boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (league_id, week, member_id)
+);
+
+create table if not exists pool_picks (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references leagues(id) on delete cascade,
+  week int not null,
+  member_id uuid not null references members(id),       -- whose pick this is
+  question_key text not null,
+  pick_member_id uuid not null references members(id),  -- who they picked
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (league_id, week, member_id, question_key)
+);
+
+create index if not exists pool_entries_league_week_idx on pool_entries (league_id, week);
+create index if not exists pool_picks_league_week_idx   on pool_picks (league_id, week);
 
 -- ============ atomic per-league ticket numbering (replaces client ticketSeq state) ============
 create or replace function assign_bet_ticket() returns trigger as $$
@@ -191,9 +221,11 @@ create trigger bets_transition_guard
   for each row execute function enforce_bet_transition();
 
 -- ============ RLS ============
-alter table leagues enable row level security;
-alter table members enable row level security;
-alter table bets    enable row level security;
+alter table leagues      enable row level security;
+alter table members      enable row level security;
+alter table bets         enable row level security;
+alter table pool_entries enable row level security;
+alter table pool_picks   enable row level security;
 
 drop policy if exists leagues_select on leagues;
 drop policy if exists leagues_insert on leagues;
@@ -238,5 +270,36 @@ create policy bets_update on bets for update using (
   )
 );
 
+drop policy if exists pool_entries_select on pool_entries;
+drop policy if exists pool_entries_insert on pool_entries;
+drop policy if exists pool_entries_update on pool_entries;
+drop policy if exists pool_picks_select   on pool_picks;
+drop policy if exists pool_picks_insert   on pool_picks;
+drop policy if exists pool_picks_update   on pool_picks;
+
+-- pool entries/picks: visible to any claimed member of the league (same as bets — nothing in
+-- this app hides data at the RLS layer, only who's allowed to write); writes are restricted to
+-- your own member row, since a pool pick has no lifecycle to enforce beyond "it's yours."
+create policy pool_entries_select on pool_entries for select using (
+  exists (select 1 from members m where m.league_id = pool_entries.league_id and m.user_id = auth.uid())
+);
+create policy pool_entries_insert on pool_entries for insert with check (
+  exists (select 1 from members m where m.id = pool_entries.member_id and m.user_id = auth.uid() and m.league_id = pool_entries.league_id)
+);
+create policy pool_entries_update on pool_entries for update using (
+  exists (select 1 from members m where m.id = pool_entries.member_id and m.user_id = auth.uid())
+);
+
+create policy pool_picks_select on pool_picks for select using (
+  exists (select 1 from members m where m.league_id = pool_picks.league_id and m.user_id = auth.uid())
+);
+create policy pool_picks_insert on pool_picks for insert with check (
+  exists (select 1 from members m  where m.id = pool_picks.member_id      and m.user_id = auth.uid() and m.league_id = pool_picks.league_id)
+  and exists (select 1 from members m2 where m2.id = pool_picks.pick_member_id and m2.league_id = pool_picks.league_id)
+);
+create policy pool_picks_update on pool_picks for update using (
+  exists (select 1 from members m where m.id = pool_picks.member_id and m.user_id = auth.uid())
+);
+
 -- ============ enable realtime ============
-alter publication supabase_realtime add table bets, members;
+alter publication supabase_realtime add table bets, members, pool_entries, pool_picks;

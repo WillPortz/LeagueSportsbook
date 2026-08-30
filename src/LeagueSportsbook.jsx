@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, User, ScrollText,
-  Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords,
+  Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords, Coins,
 } from "lucide-react";
 import * as realLeaguesApi from "./lib/leaguesApi.js";
 import * as realMembersApi from "./lib/membersApi.js";
 import * as realBetsApi from "./lib/betsApi.js";
-import { demoLeaguesApi, demoMembersApi, demoBetsApi } from "./lib/demoApi.js";
+import * as realPoolApi from "./lib/poolApi.js";
+import { demoLeaguesApi, demoMembersApi, demoBetsApi, demoPoolApi } from "./lib/demoApi.js";
 import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoData.js";
 import { signOut } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
@@ -551,6 +552,134 @@ function getPlayerPts(weekData, members, playerId) {
   return null;
 }
 
+// ---------- Weekly League Pool: the nine questions, graded from actual (not projected) results ----------
+const POOL_QUESTIONS = [
+  { key: "weekly_high", prompt: "Who will score the most fantasy points this week?" },
+  { key: "weekly_low", prompt: "Who will score the fewest fantasy points this week?" },
+  { key: "matchup_winner", prompt: "Pick anyone who will win their matchup." },
+  { key: "biggest_blowout", prompt: "Whose matchup will be the biggest blowout?" },
+  { key: "closest_matchup", prompt: "Whose matchup will be the closest?" },
+  { key: "highest_player", prompt: "Which manager will have the highest-scoring player?" },
+  { key: "most_bench", prompt: "Which manager will get the most points from their bench?" },
+  { key: "best_overperform", prompt: "Which manager will beat their projection by the most?" },
+  { key: "biggest_upset", prompt: "Which manager will pull off the biggest upset?" },
+];
+
+function poolLineupActual(weekData, member) {
+  return lineupFantasyPts(weekData, member.rosterId, member.starters);
+}
+
+function poolBenchActual(weekData, member) {
+  const row = weekData[member.rosterId];
+  if (!row?.players_points) return null;
+  const starterSet = new Set(member.starters || []);
+  const bench = (row.players || []).filter((pid) => !starterSet.has(pid));
+  return bench.reduce((sum, pid) => sum + (row.players_points[pid] || 0), 0);
+}
+
+// Picks the best (dir=1) or worst (dir=-1) scoring member(s), ties all counting as correct.
+function poolPickExtreme(entries, dir) {
+  const valid = entries.filter((e) => e.score != null);
+  if (!valid.length) return { winners: new Set(), best: null };
+  const best = dir === 1
+    ? Math.max(...valid.map((e) => e.score))
+    : Math.min(...valid.map((e) => e.score));
+  const winners = new Set(valid.filter((e) => Math.abs(e.score - best) < 1e-6).map((e) => e.id));
+  return { winners, best };
+}
+
+function gradeMatchupWinners(members, weekData) {
+  const winners = new Set();
+  getWeekPairs(weekData, members).forEach(([a, b]) => {
+    const ptsA = poolLineupActual(weekData, a);
+    const ptsB = poolLineupActual(weekData, b);
+    if (ptsA == null || ptsB == null || ptsA === ptsB) return;
+    winners.add(ptsA > ptsB ? a.id : b.id);
+  });
+  return { winners };
+}
+
+function gradeMatchupMargin(members, weekData, dir) {
+  const margins = getWeekPairs(weekData, members)
+    .map(([a, b]) => {
+      const ptsA = poolLineupActual(weekData, a);
+      const ptsB = poolLineupActual(weekData, b);
+      if (ptsA == null || ptsB == null) return null;
+      return { a, b, margin: Math.abs(ptsA - ptsB) };
+    })
+    .filter(Boolean);
+  if (!margins.length) return { winners: new Set(), best: null };
+  const best = dir === 1
+    ? Math.max(...margins.map((m) => m.margin))
+    : Math.min(...margins.map((m) => m.margin));
+  const winners = new Set();
+  margins.forEach((m) => {
+    if (Math.abs(m.margin - best) < 1e-6) { winners.add(m.a.id); winners.add(m.b.id); }
+  });
+  return { winners, best };
+}
+
+function gradeHighestPlayer(members, weekData) {
+  let best = null;
+  members.forEach((m) => {
+    const row = weekData[m.rosterId];
+    if (!row?.players_points) return;
+    (row.players || []).forEach((pid) => {
+      const pts = row.players_points[pid];
+      if (pts == null) return;
+      if (best == null || pts > best) best = pts;
+    });
+  });
+  if (best == null) return { winners: new Set(), best: null };
+  const winners = new Set();
+  members.forEach((m) => {
+    const row = weekData[m.rosterId];
+    if (!row?.players_points) return;
+    (row.players || []).forEach((pid) => {
+      if (row.players_points[pid] === best) winners.add(m.id);
+    });
+  });
+  return { winners, best };
+}
+
+function gradeBiggestUpset(members, weekData, projections) {
+  let worstProb = null;
+  let winnerId = null;
+  getWeekPairs(weekData, members).forEach(([a, b]) => {
+    const ptsA = poolLineupActual(weekData, a);
+    const ptsB = poolLineupActual(weekData, b);
+    if (ptsA == null || ptsB == null || ptsA === ptsB) return;
+    const projA = sumLineupProjections(a, projections);
+    const projB = sumLineupProjections(b, projections);
+    if (projA == null || projB == null) return;
+    const probA = winProbFromSpread(projA - projB);
+    const actualWinner = ptsA > ptsB ? a : b;
+    const winnerProb = actualWinner.id === a.id ? probA : 1 - probA;
+    if (worstProb == null || winnerProb < worstProb) { worstProb = winnerProb; winnerId = actualWinner.id; }
+  });
+  return { winners: winnerId ? new Set([winnerId]) : new Set(), best: worstProb };
+}
+
+// Composes all nine graders into { [questionKey]: { winners: Set<memberId>, best } }. Empty
+// weekData (week hasn't started) naturally yields empty winner sets for every question.
+function gradePoolWeek(members, weekData, projections) {
+  return {
+    weekly_high: poolPickExtreme(members.map((m) => ({ id: m.id, score: poolLineupActual(weekData, m) })), 1),
+    weekly_low: poolPickExtreme(members.map((m) => ({ id: m.id, score: poolLineupActual(weekData, m) })), -1),
+    matchup_winner: gradeMatchupWinners(members, weekData),
+    biggest_blowout: gradeMatchupMargin(members, weekData, 1),
+    closest_matchup: gradeMatchupMargin(members, weekData, -1),
+    highest_player: gradeHighestPlayer(members, weekData),
+    most_bench: poolPickExtreme(members.map((m) => ({ id: m.id, score: poolBenchActual(weekData, m) })), 1),
+    best_overperform: poolPickExtreme(members.map((m) => {
+      const actual = poolLineupActual(weekData, m);
+      const proj = sumLineupProjections(m, projections);
+      return { id: m.id, score: actual != null && proj != null ? actual - proj : null };
+    }), 1),
+    biggest_upset: gradeBiggestUpset(members, weekData, projections),
+  };
+}
+
 async function fetchPlayerInfo(playerIds) {
   const unique = [...new Set(playerIds.filter(Boolean))];
   let cached = {};
@@ -925,10 +1054,24 @@ function applyMemberPatch(prev, payload, membersApiModule) {
   return next;
 }
 
+function applyPoolPatch(prev, payload, ownerIdByDbId, mapRow) {
+  const { eventType, new: newRow, old: oldRow } = payload;
+  if (eventType === "DELETE") {
+    return prev.filter((r) => r.id !== oldRow.id);
+  }
+  const mapped = mapRow(newRow, ownerIdByDbId);
+  const idx = prev.findIndex((r) => r.id === mapped.id);
+  if (idx === -1) return [...prev, mapped];
+  const next = prev.slice();
+  next[idx] = mapped;
+  return next;
+}
+
 export default function LeagueSportsbook({ session, demo = false, onExitDemo }) {
   const leaguesApi = demo ? demoLeaguesApi : realLeaguesApi;
   const membersApi = demo ? demoMembersApi : realMembersApi;
   const betsApi = demo ? demoBetsApi : realBetsApi;
+  const poolApi = demo ? demoPoolApi : realPoolApi;
 
   const [league, setLeague] = useState({
     linked: false,
@@ -943,10 +1086,16 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     scoringField: "pts_ppr",
     scoringLabel: "PPR",
     projectionSeason: new Date().getFullYear(),
+    poolEntryFee: 5,
     inputId: "",
   });
   const [members, setMembers] = useState([]);
   const [bets, setBets] = useState([]);
+  const [poolEntries, setPoolEntries] = useState([]);
+  const [poolPicks, setPoolPicks] = useState([]);
+  const [myPoolDraft, setMyPoolDraft] = useState({});
+  const [poolSaving, setPoolSaving] = useState(false);
+  const [poolError, setPoolError] = useState(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [tab, setTab] = useState("slips");
   const [showForm, setShowForm] = useState(false);
@@ -1035,6 +1184,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           scoringField: leagueRow.scoring_field,
           scoringLabel: leagueRow.scoring_label,
           projectionSeason: leagueRow.projection_season,
+          poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
           inputId: leagueRow.sleeper_league_id,
         }));
         setSelectedWeek(leagueRow.current_week);
@@ -1210,6 +1360,29 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     };
   }, [league.dbId]);
 
+  // ---------- weekly league pool sync (Supabase Realtime) ----------
+  useEffect(() => {
+    if (!league.dbId) return;
+    let cancelled = false;
+    poolApi.fetchEntries(league.dbId, ownerIdByDbIdRef.current).then((rows) => {
+      if (!cancelled) setPoolEntries(rows);
+    });
+    poolApi.fetchPicks(league.dbId, ownerIdByDbIdRef.current).then((rows) => {
+      if (!cancelled) setPoolPicks(rows);
+    });
+    const offEntries = poolApi.subscribeToEntries(league.dbId, (payload) => {
+      setPoolEntries((prev) => applyPoolPatch(prev, payload, ownerIdByDbIdRef.current, poolApi.dbRowToEntry));
+    });
+    const offPicks = poolApi.subscribeToPicks(league.dbId, (payload) => {
+      setPoolPicks((prev) => applyPoolPatch(prev, payload, ownerIdByDbIdRef.current, poolApi.dbRowToPick));
+    });
+    return () => {
+      cancelled = true;
+      offEntries();
+      offPicks();
+    };
+  }, [league.dbId]);
+
   const loadWeekData = useCallback(async (weekNum, { force = false, showSpinner = false } = {}) => {
     if (!league.leagueId) return false;
     const wk = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(weekNum) || 1));
@@ -1367,6 +1540,147 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   const loadedWeekCount = useMemo(
     () => Object.keys(weekCache).filter((w) => Number(w) <= currentWeek).length,
     [weekCache, currentWeek],
+  );
+
+  // ---------- weekly league pool ----------
+  const poolWeekEntries = useMemo(() => poolEntries.filter((e) => e.week === activeWeek), [poolEntries, activeWeek]);
+  const poolWeekPicks = useMemo(() => poolPicks.filter((p) => p.week === activeWeek), [poolPicks, activeWeek]);
+  const myPoolEntry = poolWeekEntries.find((e) => e.memberId === viewer) || null;
+  const myPoolPicks = useMemo(
+    () => Object.fromEntries(poolWeekPicks.filter((p) => p.memberId === viewer).map((p) => [p.questionKey, p.pickMemberId])),
+    [poolWeekPicks, viewer],
+  );
+  const iHaveSubmitted = POOL_QUESTIONS.every((q) => myPoolPicks[q.key]);
+  const poolLocked = activeWeek < currentWeek
+    || Object.values(activeWeekData).some((row) => Number(row?.points) > 0);
+  const canSeePoolPicks = iHaveSubmitted || poolLocked;
+  const poolGrading = useMemo(
+    () => gradePoolWeek(members, activeWeekData, activeProjections),
+    [members, activeWeekData, activeProjections],
+  );
+  const poolPot = poolWeekEntries.filter((e) => e.paid).length * (Number(league.poolEntryFee) || 5);
+  const poolLeaderboard = useMemo(() => {
+    const byMember = {};
+    poolWeekPicks.forEach((p) => {
+      if (!byMember[p.memberId]) byMember[p.memberId] = {};
+      byMember[p.memberId][p.questionKey] = p.pickMemberId;
+    });
+    return Object.entries(byMember)
+      .map(([memberId, picks]) => {
+        const score = POOL_QUESTIONS.reduce((sum, q) => (
+          sum + (poolGrading[q.key]?.winners?.has(picks[q.key]) ? 1 : 0)
+        ), 0);
+        return { memberId, score, submitted: POOL_QUESTIONS.every((q) => picks[q.key]) };
+      })
+      .filter((r) => r.submitted)
+      .sort((a, b) => b.score - a.score);
+  }, [poolWeekPicks, poolGrading]);
+
+  useEffect(() => {
+    setMyPoolDraft(myPoolPicks);
+    // only reset the draft when the viewer switches weeks, not on every realtime pick update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWeek, viewer]);
+
+  async function submitMyPoolPicks() {
+    if (!POOL_QUESTIONS.every((q) => myPoolDraft[q.key])) {
+      setPoolError("Answer all nine questions before submitting.");
+      return;
+    }
+    setPoolSaving(true);
+    setPoolError(null);
+    try {
+      const picksByQuestionDbId = Object.fromEntries(
+        Object.entries(myPoolDraft).map(([key, ownerId]) => [key, dbIdByOwnerId[ownerId]]),
+      );
+      await poolApi.submitPicks(league.dbId, activeWeek, dbIdByOwnerId[viewer], picksByQuestionDbId);
+    } catch (err) {
+      setPoolError(err.message || "Couldn't save your picks — try again.");
+    } finally {
+      setPoolSaving(false);
+    }
+  }
+
+  async function togglePoolPaid() {
+    if (!myPoolEntry) return;
+    try {
+      await poolApi.setPaid(myPoolEntry.id, !myPoolEntry.paid);
+    } catch {
+      // best-effort — the toggle will just not flip visually
+    }
+  }
+
+  const renderPoolTab = () => (
+    <div>
+      {renderWeekNav()}
+      <div className="sb-board sb-pool-strip">
+        <h3>Week {activeWeek} Pool</h3>
+        <p className="sb-note">
+          ${league.poolEntryFee || 5} to enter · {poolWeekEntries.filter((e) => e.paid).length} paid in ·
+          pot is ${poolPot}. Nine questions about your league's actual results this week — most correct wins the pot.
+        </p>
+        {myPoolEntry && (
+          <button type="button" className={`sb-btn ${myPoolEntry.paid ? "sb-btn-accept" : "sb-btn-submit"}`} onClick={togglePoolPaid}>
+            {myPoolEntry.paid ? <Check size={12} /> : <Coins size={12} />} {myPoolEntry.paid ? "You're paid in" : "Mark yourself paid"}
+          </button>
+        )}
+      </div>
+
+      <div className="sb-board">
+        <h3>{iHaveSubmitted ? "Your Picks" : "Make Your Picks"}</h3>
+        {poolLocked && !iHaveSubmitted && (
+          <div className="sb-empty">This week's pool has already started — picks are locked.</div>
+        )}
+        {(!poolLocked || iHaveSubmitted) && (
+          <>
+            {POOL_QUESTIONS.map((q) => (
+              <div className="sb-pool-question" key={q.key}>
+                <label>{q.prompt}</label>
+                <select
+                  value={myPoolDraft[q.key] || ""}
+                  disabled={poolLocked}
+                  onChange={(e) => setMyPoolDraft((d) => ({ ...d, [q.key]: e.target.value }))}
+                >
+                  <option value="">Select a manager…</option>
+                  {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+                {canSeePoolPicks && poolGrading[q.key]?.winners?.size > 0 && (
+                  <span className={`sb-pool-grade ${poolGrading[q.key].winners.has(myPoolDraft[q.key]) ? "correct" : "wrong"}`}>
+                    {poolGrading[q.key].winners.has(myPoolDraft[q.key]) ? <Check size={12} /> : <X size={12} />}
+                    {[...poolGrading[q.key].winners].map(nameOf).join(", ")}
+                  </span>
+                )}
+              </div>
+            ))}
+            {poolError && <div className="sb-error-banner"><AlertTriangle size={12} /> {poolError}</div>}
+            {!poolLocked && (
+              <div className="sb-form-actions">
+                <button type="button" className="sb-btn sb-btn-submit" onClick={submitMyPoolPicks} disabled={poolSaving}>
+                  {poolSaving ? "Saving…" : iHaveSubmitted ? "Update Picks" : "Submit Picks"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {canSeePoolPicks && poolLeaderboard.length > 0 && (
+        <div className="sb-board">
+          <h3>Leaderboard</h3>
+          {poolLeaderboard.map((r, i) => (
+            <div className="sb-owe-row" key={r.memberId}>
+              <span style={{ color: i === 0 ? "var(--gold-bright)" : "inherit" }}>
+                {i === 0 && <Trophy size={12} style={{ marginRight: "0.3rem" }} />}{nameOf(r.memberId)}
+              </span>
+              <span style={{ marginLeft: "auto" }}>{r.score} / {POOL_QUESTIONS.length}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {!canSeePoolPicks && (
+        <div className="sb-empty">Submit your own picks to see everyone else's and the live leaderboard.</div>
+      )}
+    </div>
   );
 
   useEffect(() => {
@@ -2531,6 +2845,9 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         <button className={`sb-tab ${tab === "matchup" ? "active" : ""}`} onClick={() => setTab("matchup")}>
           <Swords size={16} /> Matchup
         </button>
+        <button className={`sb-tab ${tab === "pool" ? "active" : ""}`} onClick={() => setTab("pool")}>
+          <Coins size={16} /> Pool
+        </button>
         <button className={`sb-tab ${tab === "slips" ? "active" : ""}`} onClick={() => setTab("slips")}>
           <ScrollText size={16} /> Bet Slips
         </button>
@@ -2752,6 +3069,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           </div>
         )}
 
+        {tab === "pool" && renderPoolTab()}
+
         {tab === "slips" && (
           <div>
             {renderWeekNav(
@@ -2947,6 +3266,28 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                 </button>
               </div>
               {league.error && <div className="sb-error-banner"><AlertTriangle size={12} /> {league.error}</div>}
+            </div>
+
+            <div className="sb-board">
+              <h3>Weekly League Pool</h3>
+              <p className="sb-note">Default entry fee everyone antes up each week. Editing this only changes future weeks.</p>
+              <div className="sb-pool-question" style={{ borderBottom: "none", padding: 0 }}>
+                <label>Entry fee ($)</label>
+                <select
+                  value={String(league.poolEntryFee || 5)}
+                  onChange={async (e) => {
+                    const fee = Number(e.target.value);
+                    setLeague((s) => ({ ...s, poolEntryFee: fee }));
+                    try {
+                      await leaguesApi.upsertLeague(league.leagueId, { pool_entry_fee: fee });
+                    } catch {
+                      // best-effort — worst case the fee display reverts on next refresh
+                    }
+                  }}
+                >
+                  {[5, 10, 15, 20, 25].map((v) => <option key={v} value={v}>${v}</option>)}
+                </select>
+              </div>
             </div>
 
             <div className="sb-board">
