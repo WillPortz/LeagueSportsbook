@@ -94,6 +94,28 @@ function winProbFromSpread(spread) {
   return 1 / (1 + Math.exp(-spread / 7));
 }
 
+// Ranks a field of candidates by score (higher = more likely to be the picked outcome) and
+// assigns each a probability via geometric decay — a simple "favorite most likely" heuristic,
+// not a precise simulation. Ties split the weight evenly (an all-tied field, e.g. everyone at
+// 0-0 in week 1, comes out exactly uniform). Negate `score` beforehand for "least likely" markets.
+function rankFieldOdds(candidates) {
+  if (!candidates.length) return [];
+  const sorted = [...candidates].sort((a, b) => b.score - a.score);
+  const decay = 0.65;
+  const raw = sorted.map((_, i) => Math.pow(decay, i));
+  const weightByIndex = new Array(sorted.length);
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j < sorted.length && sorted[j].score === sorted[i].score) j += 1;
+    const avg = raw.slice(i, j).reduce((sum, w) => sum + w, 0) / (j - i);
+    for (let k = i; k < j; k += 1) weightByIndex[k] = avg;
+    i = j;
+  }
+  const total = weightByIndex.reduce((sum, w) => sum + w, 0);
+  return sorted.map((c, idx) => ({ ...c, prob: weightByIndex[idx] / total }));
+}
+
 function liveStarters(member, weekData) {
   const live = (weekData?.[member?.rosterId]?.starters || []).filter((id) => id && id !== "0");
   return live.length ? live : (member?.starters || []);
@@ -295,78 +317,26 @@ function sumLineupProjections(member, projections, starters = null) {
   return Math.round(total * 10) / 10;
 }
 
-function generateBoardOfferings(members, week, weekData, players, projections, scoringLabel = "Sleeper") {
-  if (!members.length || !Object.keys(players).length) return [];
+function generateWeeklyBoardOfferings(members, week, weekData, projections, scoringLabel = "Sleeper") {
+  if (!members.length) return [];
 
   const offerings = [];
   const pairs = Object.keys(weekData).length > 0
     ? getWeekPairs(weekData, members)
     : [];
 
-  members.forEach((m) => {
-    getFeaturedStarters(m, players).forEach((pid) => {
-      const p = players[pid];
-      if (!p) return;
-      const rawProj = sleeperProj(pid, projections);
-      const line = betLineFromProj(rawProj);
-      if (line == null) return;
-      offerings.push({
-        id: `pou-${week}-${pid}`,
-        kind: "player_ou",
-        category: "props",
-        type: "prop",
-        week,
-        title: `${p.name} O/U ${formatProj(line)} fantasy pts`,
-        subtitle: `${m.name} · ${p.position}${p.team ? ` · ${p.team}` : ""} · Sleeper ${scoringLabel} proj ${formatProj(rawProj)}`,
-        playerId: pid,
-        ownerId: m.id,
-        fantasyTeamId: m.id,
-        position: p.position,
-        nflTeam: p.team || null,
-        line,
-        sides: [
-          { key: "over", label: `Over ${formatProj(line)}`, odds: -110, pick: "over" },
-          { key: "under", label: `Under ${formatProj(line)}`, odds: -110, pick: "under" },
-        ],
-      });
-    });
-  });
-
-  members.forEach((m) => {
-    const line = sumLineupProjections(m, projections);
-    if (line == null) return;
-    offerings.push({
-      id: `lineup-${week}-${m.id}`,
-      kind: "lineup_ou",
-      category: "lineups",
-      type: "prop",
-      week,
-      title: `${m.name} lineup O/U ${formatProj(line)} fantasy pts`,
-      subtitle: `Week ${week} · Sleeper ${scoringLabel} starter projections`,
-      subjectId: m.id,
-      fantasyTeamId: m.id,
-      line,
-      sides: [
-        { key: "over", label: `Over ${formatProj(line)}`, odds: -115, pick: "over" },
-        { key: "under", label: `Under ${formatProj(line)}`, odds: -105, pick: "under" },
-      ],
-    });
-  });
-
+  // Head-to-head matchup (moneyline)
   pairs.forEach(([a, b]) => {
     const projA = sumLineupProjections(a, projections);
     const projB = sumLineupProjections(b, projections);
     if (projA == null || projB == null) return;
-    const spread = projA - projB;
-    const probA = winProbFromSpread(spread);
-
+    const probA = winProbFromSpread(projA - projB);
     offerings.push({
-      id: `lineup-ml-${week}-${a.id}-${b.id}`,
+      id: `h2h-${week}-${a.id}-${b.id}`,
       kind: "lineup_ml",
-      category: "matchups",
       type: "matchup",
       week,
-      title: `${a.name} vs ${b.name} — lineup pts`,
+      title: `${a.name} vs ${b.name}`,
       subtitle: `Week ${week} · Sleeper ${scoringLabel} proj ${formatProj(projA)} vs ${formatProj(projB)}`,
       memberA: a.id,
       memberB: b.id,
@@ -376,39 +346,187 @@ function generateBoardOfferings(members, week, weekData, players, projections, s
         { key: "b", memberId: b.id, label: b.name, odds: americanOdds(1 - probA) },
       ],
     });
+  });
 
-    const matchups = [
-      { pos: "QB", label: "QB" },
-      { pos: "RB", label: "RB" },
-      { pos: "WR", label: "WR" },
-    ];
-    matchups.forEach(({ pos, label }) => {
-      const pidA = findStarterByPos(a, players, pos);
-      const pidB = findStarterByPos(b, players, pos);
-      if (!pidA || !pidB) return;
-      const lineA = sleeperProj(pidA, projections);
-      const lineB = sleeperProj(pidB, projections);
-      if (lineA == null || lineB == null) return;
-      const prob = winProbFromSpread(lineA - lineB);
+  // Weekly High / Low Score — pick one manager out of the whole field
+  const scored = members
+    .map((m) => ({ id: m.id, name: m.name, score: sumLineupProjections(m, projections) }))
+    .filter((r) => r.score != null);
+  if (scored.length > 1) {
+    rankFieldOdds(scored).forEach((r) => {
       offerings.push({
-        id: `ph2h-${week}-${pidA}-${pidB}`,
-        kind: "player_h2h",
-        category: "matchups",
-        type: "prop",
+        id: `weekly-high-${week}-${r.id}`,
+        kind: "weekly_high",
+        type: "matchup",
         week,
-        title: `${playerLabel(players, pidA)} vs ${playerLabel(players, pidB)}`,
-        subtitle: `Week ${week} · ${label} H2H · Sleeper ${formatProj(lineA)} vs ${formatProj(lineB)}`,
-        playerIdA: pidA,
-        playerIdB: pidB,
-        memberA: a.id,
-        memberB: b.id,
-        fantasyTeamIds: [a.id, b.id],
-        position: pos,
-        sides: [
-          { key: "a", playerId: pidA, memberId: a.id, label: playerLabel(players, pidA), odds: americanOdds(prob) },
-          { key: "b", playerId: pidB, memberId: b.id, label: playerLabel(players, pidB), odds: americanOdds(1 - prob) },
-        ],
+        title: `${r.name} — Weekly High Score`,
+        subtitle: `Week ${week} · proj ${formatProj(r.score)} pts`,
+        subjectId: r.id,
+        fantasyTeamIds: [r.id],
+        sides: [{ key: "pick", label: `${r.name} has the high score`, odds: americanOdds(r.prob) }],
       });
+    });
+    rankFieldOdds(scored.map((r) => ({ ...r, score: -r.score }))).forEach((r) => {
+      offerings.push({
+        id: `weekly-low-${week}-${r.id}`,
+        kind: "weekly_low",
+        type: "matchup",
+        week,
+        title: `${r.name} — Weekly Low Score`,
+        subtitle: `Week ${week} · proj ${formatProj(-r.score)} pts`,
+        subjectId: r.id,
+        fantasyTeamIds: [r.id],
+        sides: [{ key: "pick", label: `${r.name} has the low score`, odds: americanOdds(r.prob) }],
+      });
+    });
+  }
+
+  // Biggest Blowout / Closest Matchup — pick one real pairing out of the whole field
+  const pairMargins = pairs
+    .map(([a, b]) => {
+      const projA = sumLineupProjections(a, projections);
+      const projB = sumLineupProjections(b, projections);
+      if (projA == null || projB == null) return null;
+      return { a, b, projA, projB, margin: Math.abs(projA - projB) };
+    })
+    .filter(Boolean);
+  if (pairMargins.length > 1) {
+    rankFieldOdds(pairMargins.map((r) => ({ id: `${r.a.id}-${r.b.id}`, score: r.margin, ref: r }))).forEach((r) => {
+      const { a, b, projA, projB } = r.ref;
+      offerings.push({
+        id: `blowout-${week}-${a.id}-${b.id}`,
+        kind: "weekly_blowout",
+        type: "matchup",
+        week,
+        title: `${a.name} vs ${b.name} — Biggest Blowout`,
+        subtitle: `Week ${week} · proj margin ${formatProj(r.score)} (${formatProj(projA)} vs ${formatProj(projB)})`,
+        subjectId: a.id,
+        matchupPeerId: b.id,
+        fantasyTeamIds: [a.id, b.id],
+        sides: [{ key: "pick", label: `${a.name} / ${b.name} is the biggest blowout`, odds: americanOdds(r.prob) }],
+      });
+    });
+    rankFieldOdds(pairMargins.map((r) => ({ id: `${r.a.id}-${r.b.id}`, score: -r.margin, ref: r }))).forEach((r) => {
+      const { a, b, projA, projB } = r.ref;
+      offerings.push({
+        id: `closest-${week}-${a.id}-${b.id}`,
+        kind: "weekly_closest",
+        type: "matchup",
+        week,
+        title: `${a.name} vs ${b.name} — Closest Matchup`,
+        subtitle: `Week ${week} · proj margin ${formatProj(-r.score)} (${formatProj(projA)} vs ${formatProj(projB)})`,
+        subjectId: a.id,
+        matchupPeerId: b.id,
+        fantasyTeamIds: [a.id, b.id],
+        sides: [{ key: "pick", label: `${a.name} / ${b.name} is the closest matchup`, odds: americanOdds(r.prob) }],
+      });
+    });
+  }
+
+  return offerings;
+}
+
+function rankSuffix(n) {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return "th";
+  switch (n % 10) {
+    case 1: return "st";
+    case 2: return "nd";
+    case 3: return "rd";
+    default: return "th";
+  }
+}
+
+function generateSeasonBoardOfferings(members, playoffTeams) {
+  if (members.length < 2) return [];
+
+  const offerings = [];
+  const composite = members.map((m) => ({ id: m.id, name: m.name, score: (m.wins || 0) + (m.seasonPts || 0) / 10000 }));
+
+  rankFieldOdds(composite).forEach((r) => {
+    offerings.push({
+      id: `season-champion-${r.id}`,
+      kind: "season_champion",
+      type: "season",
+      title: `${r.name} — League Champion`,
+      subtitle: "Odds based on current record",
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} wins the league`, odds: americanOdds(r.prob) }],
+    });
+  });
+
+  rankFieldOdds(composite).forEach((r) => {
+    offerings.push({
+      id: `season-wins-${r.id}`,
+      kind: "season_wins",
+      type: "season",
+      title: `${r.name} — Most Regular-Season Wins`,
+      subtitle: "Odds based on current record",
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} has the most wins`, odds: americanOdds(r.prob) }],
+    });
+  });
+
+  const points = members.map((m) => ({ id: m.id, name: m.name, score: m.seasonPts || 0 }));
+  rankFieldOdds(points).forEach((r) => {
+    offerings.push({
+      id: `season-points-${r.id}`,
+      kind: "season_points",
+      type: "season",
+      title: `${r.name} — Most Total Points`,
+      subtitle: `Season points so far: ${formatProj(r.score)}`,
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} scores the most total points`, odds: americanOdds(r.prob) }],
+    });
+  });
+
+  rankFieldOdds(composite.map((r) => ({ ...r, score: -r.score }))).forEach((r) => {
+    offerings.push({
+      id: `season-last-${r.id}`,
+      kind: "season_last",
+      type: "season",
+      title: `${r.name} — Last Place`,
+      subtitle: "Odds based on current record",
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} finishes last`, odds: americanOdds(r.prob) }],
+    });
+  });
+
+  const cutoff = playoffTeams || Math.ceil(members.length / 2);
+  const rankedComposite = [...composite].sort((a, b) => b.score - a.score);
+  // Average rank across tie groups (1-based) so an all-tied field — e.g. week 1, everyone 0-0 —
+  // gives every manager the same fair make-probability instead of an arbitrary sort-order artifact.
+  const avgRankById = new Map();
+  {
+    let i = 0;
+    while (i < rankedComposite.length) {
+      let j = i;
+      while (j < rankedComposite.length && rankedComposite[j].score === rankedComposite[i].score) j += 1;
+      const avgRank = (i + 1 + j) / 2;
+      for (let k = i; k < j; k += 1) avgRankById.set(rankedComposite[k].id, avgRank);
+      i = j;
+    }
+  }
+  rankedComposite.forEach((r) => {
+    const rank = avgRankById.get(r.id);
+    const probMake = 1 / (1 + Math.exp((rank - cutoff - 0.5) / 1.2));
+    const rankLabel = Number.isInteger(rank) ? `${rank}${rankSuffix(rank)}` : `~${Math.round(rank)}${rankSuffix(Math.round(rank))}`;
+    offerings.push({
+      id: `season-playoffs-${r.id}`,
+      kind: "season_playoffs",
+      type: "season",
+      title: `${r.name} — Make the Playoffs`,
+      subtitle: `Top ${cutoff} make it · currently ${rankLabel}`,
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [
+        { key: "make", pick: "over", label: `${r.name} makes the playoffs`, odds: americanOdds(probMake) },
+        { key: "miss", pick: "under", label: `${r.name} misses the playoffs`, odds: americanOdds(1 - probMake) },
+      ],
     });
   });
 
@@ -681,59 +799,33 @@ function computeOpponentFor(offering, side, viewer) {
   return null;
 }
 
-function groupBoardEvents(offerings, members) {
-  const events = [];
-  const teamMap = {};
-  offerings.filter((o) => o.kind === "player_ou").forEach((o) => {
-    const tid = o.fantasyTeamId || o.ownerId || "other";
-    if (!teamMap[tid]) teamMap[tid] = [];
-    teamMap[tid].push(o);
-  });
-  Object.entries(teamMap).forEach(([tid, markets]) => {
-    const team = members.find((m) => m.id === tid);
-    events.push({
-      id: `team-${tid}`,
-      title: team?.name || "Team",
-      subtitle: "Player fantasy points · Sleeper",
-      markets,
-    });
-  });
-  const lineups = offerings.filter((o) => o.kind === "lineup_ou");
-  if (lineups.length) {
-    events.push({
-      id: "lineups",
-      title: "Lineup Totals",
-      subtitle: "Combined starter projections",
-      markets: lineups,
-    });
-  }
-  const matchups = offerings.filter((o) => o.kind === "lineup_ml" || o.kind === "player_h2h");
-  if (matchups.length) {
-    events.push({
-      id: "matchups",
-      title: "Head-to-Head Markets",
-      subtitle: "Lineup & position battles",
-      markets: matchups,
-    });
-  }
-  return events;
+const WEEKLY_BOARD_GROUPS = [
+  { kind: "lineup_ml", title: "Head-to-Head Matchup", subtitle: "Who wins this week" },
+  { kind: "weekly_high", title: "Weekly High Score", subtitle: "Pick the week's top scorer" },
+  { kind: "weekly_low", title: "Weekly Low Score", subtitle: "Pick the week's bottom scorer" },
+  { kind: "weekly_blowout", title: "Biggest Blowout", subtitle: "Pick the widest margin of the week" },
+  { kind: "weekly_closest", title: "Closest Matchup", subtitle: "Pick the tightest margin of the week" },
+];
+
+const SEASON_BOARD_GROUPS = [
+  { kind: "season_champion", title: "League Champion", subtitle: "Who wins it all" },
+  { kind: "season_playoffs", title: "Make/Miss Playoffs", subtitle: "Per-manager, either side" },
+  { kind: "season_wins", title: "Most Regular-Season Wins", subtitle: "Best record after week 18" },
+  { kind: "season_points", title: "Most Total Points", subtitle: "Highest season point total" },
+  { kind: "season_last", title: "Last Place", subtitle: "Bottom of the standings" },
+];
+
+function groupBoardOfferingsByKind(offerings, groupDefs) {
+  return groupDefs
+    .map((g) => ({ ...g, id: g.kind, markets: offerings.filter((o) => o.kind === g.kind) }))
+    .filter((g) => g.markets.length > 0);
 }
 
-function filterBoardOfferings(offerings, { category, fantasyTeam, position, nflTeam }) {
-  return offerings.filter((o) => {
-    if (category !== "all" && o.category !== category) return false;
-    if (fantasyTeam !== "all") {
-      const ids = o.fantasyTeamIds || (o.fantasyTeamId ? [o.fantasyTeamId] : []);
-      if (!ids.includes(fantasyTeam)) return false;
-    }
-    if (position !== "all") {
-      if (!o.position || o.position !== position) return false;
-    }
-    if (nflTeam !== "all") {
-      if (!o.nflTeam || o.nflTeam !== nflTeam) return false;
-    }
-    return true;
-  });
+function offeringInvolvesMember(offering, memberId) {
+  if (memberId === "all") return true;
+  const ids = offering.fantasyTeamIds
+    || [offering.subjectId, offering.matchupPeerId, offering.memberA, offering.memberB].filter(Boolean);
+  return ids.includes(memberId);
 }
 
 const TYPE_LABEL = {
@@ -749,11 +841,26 @@ const BOARD_KIND_LABEL = {
   lineup_ou: "Point Total",
   player_ou: "Player Prop",
   player_h2h: "Player vs Player",
+  weekly_high: "Weekly High Score",
+  weekly_low: "Weekly Low Score",
+  weekly_blowout: "Biggest Blowout",
+  weekly_closest: "Closest Matchup",
+  season_champion: "League Champion",
+  season_playoffs: "Make/Miss Playoffs",
+  season_wins: "Most Wins",
+  season_points: "Most Points",
+  season_last: "Last Place",
 };
 
 function ticketTypeLabel(bet) {
   return BOARD_KIND_LABEL[bet.boardKind] || TYPE_LABEL[bet.type];
 }
+
+// board_kinds that are a single "will X be the outcome" proposition (one candidate, one side) —
+// share the same opponent-resolution + bet-object shape in placeBoardBet.
+const SINGLE_PICK_BOARD_KINDS = [
+  "weekly_high", "weekly_low", "season_champion", "season_wins", "season_points", "season_last",
+];
 
 const AUTO_GRADABLE = { matchup: true, prop: true, season: false, proposition: false };
 
@@ -867,10 +974,8 @@ export default function LeagueSportsbook({ session }) {
   const weekCacheRef = useRef({});
   const loadingWeeksRef = useRef(new Set());
   const [players, setPlayers] = useState({});
-  const [boardCategory, setBoardCategory] = useState("all");
   const [boardFantasyTeam, setBoardFantasyTeam] = useState("all");
-  const [boardPosition, setBoardPosition] = useState("all");
-  const [boardNflTeam, setBoardNflTeam] = useState("all");
+  const [playoffTeams, setPlayoffTeams] = useState(null);
   const [globalStake, setGlobalStake] = useState(10);
   const [betSlipPick, setBetSlipPick] = useState(null);
   const [customH2H, setCustomH2H] = useState({ myPlayerId: "", oppMemberId: "", oppPlayerId: "" });
@@ -1161,6 +1266,7 @@ export default function LeagueSportsbook({ session }) {
       weekCacheRef.current = { ...weekCacheRef.current, [wk]: entry };
       setWeekCache((prev) => ({ ...prev, [wk]: entry }));
       setPlayers(playerInfo);
+      setPlayoffTeams(Number(leagueData?.settings?.playoff_teams) || null);
       setLeague((s) => ({
         ...s,
         loading: showSpinner ? false : s.loading,
@@ -1296,37 +1402,40 @@ export default function LeagueSportsbook({ session }) {
     [members, matchupWeekData],
   );
 
-  const boardOfferings = useMemo(
-    () => generateBoardOfferings(
+  const weeklyBoardOfferings = useMemo(
+    () => generateWeeklyBoardOfferings(
       activeWeekMembers,
       activeWeek,
       activeWeekData,
-      players,
       activeProjections,
       league.scoringLabel,
     ),
-    [activeWeekMembers, activeWeek, activeWeekData, players, activeProjections, league.scoringLabel],
+    [activeWeekMembers, activeWeek, activeWeekData, activeProjections, league.scoringLabel],
   );
 
-  const boardNflTeams = useMemo(() => {
-    const teams = new Set();
-    Object.values(players).forEach((p) => { if (p.team) teams.add(p.team); });
-    return [...teams].sort();
-  }, [players]);
-
-  const filteredBoardOfferings = useMemo(
-    () => filterBoardOfferings(boardOfferings, {
-      category: boardCategory,
-      fantasyTeam: boardFantasyTeam,
-      position: boardPosition,
-      nflTeam: boardNflTeam,
-    }),
-    [boardOfferings, boardCategory, boardFantasyTeam, boardPosition, boardNflTeam],
+  const seasonBoardOfferings = useMemo(
+    () => generateSeasonBoardOfferings(members, playoffTeams),
+    [members, playoffTeams],
   );
 
-  const boardEvents = useMemo(
-    () => groupBoardEvents(filteredBoardOfferings, members),
-    [filteredBoardOfferings, members],
+  const filteredWeeklyBoardOfferings = useMemo(
+    () => weeklyBoardOfferings.filter((o) => offeringInvolvesMember(o, boardFantasyTeam)),
+    [weeklyBoardOfferings, boardFantasyTeam],
+  );
+
+  const filteredSeasonBoardOfferings = useMemo(
+    () => seasonBoardOfferings.filter((o) => offeringInvolvesMember(o, boardFantasyTeam)),
+    [seasonBoardOfferings, boardFantasyTeam],
+  );
+
+  const weeklyBoardEvents = useMemo(
+    () => groupBoardOfferingsByKind(filteredWeeklyBoardOfferings, WEEKLY_BOARD_GROUPS),
+    [filteredWeeklyBoardOfferings],
+  );
+
+  const seasonBoardEvents = useMemo(
+    () => groupBoardOfferingsByKind(filteredSeasonBoardOfferings, SEASON_BOARD_GROUPS),
+    [filteredSeasonBoardOfferings],
   );
 
   const viewerMember = useMemo(
@@ -1650,6 +1759,35 @@ export default function LeagueSportsbook({ session }) {
       bet.playerIdB = offering.playerIdB;
       bet.pickPlayerId = side.playerId;
       title = `${playerLabel(players, side.playerId)} beats ${playerLabel(players, side.playerId === offering.playerIdA ? offering.playerIdB : offering.playerIdA)} @ ${formatOdds(side.odds)}`;
+      bet.title = title;
+    } else if (SINGLE_PICK_BOARD_KINDS.includes(offering.kind)) {
+      opponent = offering.counterpartyId
+        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
+        || members.find((m) => m.id !== viewer)?.id;
+      if (!opponent) return;
+      bet.opponent = opponent;
+      bet.subjectId = offering.subjectId;
+      title = `${side.label} @ ${formatOdds(side.odds)}`;
+      bet.title = title;
+    } else if (offering.kind === "weekly_blowout" || offering.kind === "weekly_closest") {
+      opponent = offering.counterpartyId
+        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId && m.id !== offering.matchupPeerId)?.id
+        || members.find((m) => m.id !== viewer)?.id;
+      if (!opponent) return;
+      bet.opponent = opponent;
+      bet.subjectId = offering.subjectId;
+      bet.matchupPeerId = offering.matchupPeerId;
+      title = `${side.label} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
+      bet.title = title;
+    } else if (offering.kind === "season_playoffs") {
+      opponent = offering.counterpartyId
+        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
+        || members.find((m) => m.id !== viewer)?.id;
+      if (!opponent) return;
+      bet.opponent = opponent;
+      bet.subjectId = offering.subjectId;
+      bet.creatorSide = side.pick;
+      title = `${side.label} @ ${formatOdds(side.odds)}`;
       bet.title = title;
     }
 
@@ -2067,6 +2205,56 @@ export default function LeagueSportsbook({ session }) {
         return;
       }
 
+      if (bet.boardKind === "weekly_high" || bet.boardKind === "weekly_low") {
+        const scored = members
+          .map((m) => ({ id: m.id, pts: lineupFantasyPts(weekData, m.rosterId, m.starters) }))
+          .filter((r) => r.pts != null);
+        if (!scored.length) {
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
+          return;
+        }
+        const target = bet.boardKind === "weekly_high"
+          ? Math.max(...scored.map((r) => r.pts))
+          : Math.min(...scored.map((r) => r.pts));
+        const winners = scored.filter((r) => r.pts === target).map((r) => r.id);
+        if (winners.length > 1) {
+          setBetErrors((e) => ({ ...e, [bet.id]: `Tied at ${target} pts among ${winners.length} teams — grade manually (push?).` }));
+          return;
+        }
+        const creatorWins = winners[0] === bet.subjectId;
+        await settle({ result: creatorWins ? "creator" : "opponent", actual: target });
+        return;
+      }
+
+      if (bet.boardKind === "weekly_blowout" || bet.boardKind === "weekly_closest") {
+        const weekPairs = getWeekPairs(weekData, members);
+        const margins = weekPairs
+          .map(([a, b]) => {
+            const ptsA = lineupFantasyPts(weekData, a.rosterId, a.starters);
+            const ptsB = lineupFantasyPts(weekData, b.rosterId, b.starters);
+            if (ptsA == null || ptsB == null) return null;
+            return { aId: a.id, bId: b.id, margin: Math.abs(ptsA - ptsB) };
+          })
+          .filter(Boolean);
+        if (!margins.length) {
+          setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
+          return;
+        }
+        const target = bet.boardKind === "weekly_blowout"
+          ? Math.max(...margins.map((r) => r.margin))
+          : Math.min(...margins.map((r) => r.margin));
+        const winners = margins.filter((r) => r.margin === target);
+        if (winners.length > 1) {
+          setBetErrors((e) => ({ ...e, [bet.id]: `Tied at a ${target}-pt margin among ${winners.length} matchups — grade manually (push?).` }));
+          return;
+        }
+        const w = winners[0];
+        const pairMatches = (w.aId === bet.subjectId && w.bId === bet.matchupPeerId)
+          || (w.bId === bet.subjectId && w.aId === bet.matchupPeerId);
+        await settle({ result: pairMatches ? "creator" : "opponent", actual: target });
+        return;
+      }
+
       const rA = rosterIdFor(bet.creator);
       const rB = rosterIdFor(bet.opponent);
       if (!rA || !rB) {
@@ -2468,24 +2656,6 @@ export default function LeagueSportsbook({ session }) {
               Tap a line to add it to your bet slip. Projections are from Sleeper ({league.projectionSeason} week {activeWeek}, {league.scoringLabel} scoring).
             </p>
 
-            <div className="dk-sport-chips">
-              {[
-                { id: "all", label: "All Markets" },
-                { id: "props", label: "Player Props" },
-                { id: "lineups", label: "Lineups" },
-                { id: "matchups", label: "H2H" },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`dk-sport-chip${boardCategory === opt.id ? " active" : ""}`}
-                  onClick={() => setBoardCategory(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
             <div className="sb-board-filters" style={{ marginBottom: "0.85rem" }}>
               <div className="sb-board-filter">
                 <label>Fantasy team</label>
@@ -2496,56 +2666,33 @@ export default function LeagueSportsbook({ session }) {
                   ))}
                 </select>
               </div>
-              <div className="sb-board-filter">
-                <label>Position</label>
-                <select value={boardPosition} onChange={(e) => setBoardPosition(e.target.value)}>
-                  <option value="all">All positions</option>
-                  {["QB", "RB", "WR", "TE"].map((pos) => (
-                    <option key={pos} value={pos}>{pos}</option>
-                  ))}
-                </select>
-              </div>
-              {boardNflTeams.length > 0 && (
-                <div className="sb-board-filter">
-                  <label>NFL team</label>
-                  <select value={boardNflTeam} onChange={(e) => setBoardNflTeam(e.target.value)}>
-                    <option value="all">All NFL teams</option>
-                    {boardNflTeams.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
+            </div>
+
+            <div className="sb-board-section">
+              <h3>Weekly Bets</h3>
+              {weeklyBoardEvents.length === 0 ? (
+                <div className="sb-board">
+                  <div className="sb-empty">
+                    {league.loading
+                      ? "Loading Sleeper projections and matchup lines…"
+                      : "No weekly lines yet — refresh league on the League tab, then hit Refresh lines here."}
+                  </div>
                 </div>
+              ) : (
+                weeklyBoardEvents.map((ev) => renderEventCard(ev.title, ev.subtitle, ev.markets.map(renderMarketRow), ev.id))
               )}
             </div>
 
-            {(() => {
-              const hasLines = boardOfferings.length > 0;
-              const hasFiltered = filteredBoardOfferings.length > 0;
-              return (
-                <>
-                  {!hasLines && (
-                    <div className="sb-board">
-                      <div className="sb-empty">
-                        {league.loading
-                          ? "Loading Sleeper projections and matchup lines…"
-                          : "No lines yet — refresh league on the League tab, then hit Refresh lines here."}
-                      </div>
-                    </div>
-                  )}
-                  {hasLines && !hasFiltered && (
-                    <div className="sb-board">
-                      <div className="sb-empty">No lines match your filters.</div>
-                    </div>
-                  )}
-                  {boardEvents.map((ev) => renderEventCard(
-                    ev.title,
-                    ev.subtitle,
-                    ev.markets.map(renderMarketRow),
-                    ev.id,
-                  ))}
-                </>
-              );
-            })()}
+            <div className="sb-board-section">
+              <h3>Season Bets</h3>
+              {seasonBoardEvents.length === 0 ? (
+                <div className="sb-board">
+                  <div className="sb-empty">No season lines yet — connect your league to see these.</div>
+                </div>
+              ) : (
+                seasonBoardEvents.map((ev) => renderEventCard(ev.title, ev.subtitle, ev.markets.map(renderMarketRow), ev.id))
+              )}
+            </div>
           </div>
         )}
 
