@@ -788,17 +788,6 @@ function findPlayerOwner(members, pid) {
   return members.find((m) => (m.roster?.length ? m.roster : m.starters || []).includes(pid)) || null;
 }
 
-// The money-opponent a given side click would resolve to — an explicit counterpartyId
-// (set by the Bet Builder) always wins; otherwise infer from the un-picked side, matching
-// placeBoardBet's own resolution so a click is never allowed to make you your own opponent.
-function computeOpponentFor(offering, side, viewer) {
-  if (offering.counterpartyId) return offering.counterpartyId;
-  if (offering.kind === "lineup_ml" || offering.kind === "player_h2h") {
-    return side.memberId === offering.memberA ? offering.memberB : offering.memberA;
-  }
-  return null;
-}
-
 const WEEKLY_BOARD_GROUPS = [
   { kind: "lineup_ml", title: "Head-to-Head Matchup", subtitle: "Who wins this week" },
   { kind: "weekly_high", title: "Weekly High Score", subtitle: "Pick the week's top scorer" },
@@ -905,6 +894,7 @@ const STATUS_STYLE = {
   accepted: { label: "ON THE BOARD", color: "#3a6b52", rotate: -6 },
   locked: { label: "LOCKED", color: "#7a3b3b", rotate: -10 },
   settled: { label: "GRADED", color: "#4b4b4b", rotate: -6 },
+  cancelled: { label: "CANCELLED", color: "#7a3b3b", rotate: -8 },
 };
 
 function applyBetPatch(prev, payload, ownerIdByDbId) {
@@ -964,7 +954,7 @@ export default function LeagueSportsbook({ session }) {
   const defaultOpponent = members.find((m) => m.id !== viewer)?.id || "";
 
   const [form, setForm] = useState({
-    type: "matchup", title: "", opponent: defaultOpponent, stake: 10, week: 1,
+    type: "matchup", title: "", stake: 10, week: 1,
     playerId: "", line: "", creatorSide: "over",
   });
   const [ledgerView, setLedgerView] = useState("weekly");
@@ -978,6 +968,7 @@ export default function LeagueSportsbook({ session }) {
   const [playoffTeams, setPlayoffTeams] = useState(null);
   const [globalStake, setGlobalStake] = useState(10);
   const [betSlipPick, setBetSlipPick] = useState(null);
+  const [collapsedBoardGroups, setCollapsedBoardGroups] = useState(() => new Set());
   const [customH2H, setCustomH2H] = useState({ myPlayerId: "", oppMemberId: "", oppPlayerId: "" });
   const [customMatchPos, setCustomMatchPos] = useState(true);
   const [matchupPlayerPick, setMatchupPlayerPick] = useState({ my: "", opp: "" });
@@ -986,8 +977,8 @@ export default function LeagueSportsbook({ session }) {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [builderCategory, setBuilderCategory] = useState(null); // 'matchup' | 'total' | 'prop' | 'battle' | null
   const [matchupBuilder, setMatchupBuilder] = useState({ opponent: "", format: "moneyline", spreadLine: "" });
-  const [totalBuilder, setTotalBuilder] = useState({ subjectId: "", opponent: "", line: "" });
-  const [propBuilder, setPropBuilder] = useState({ playerId: "", opponent: "", line: "" });
+  const [totalBuilder, setTotalBuilder] = useState({ subjectId: "", line: "" });
+  const [propBuilder, setPropBuilder] = useState({ playerId: "", line: "" });
 
   const nameOf = useCallback(
     (id) => members.find((m) => m.id === id)?.name || id,
@@ -1048,11 +1039,6 @@ export default function LeagueSportsbook({ session }) {
     return () => { cancelled = true; };
   }, [session.user.id]);
 
-  useEffect(() => {
-    if (defaultOpponent && !members.some((m) => m.id === form.opponent && m.id !== viewer)) {
-      setForm((f) => ({ ...f, opponent: defaultOpponent }));
-    }
-  }, [defaultOpponent, viewer, members, form.opponent]);
 
   const fetchLeagueData = useCallback(async (leagueId) => {
     const id = leagueId.trim();
@@ -1564,7 +1550,6 @@ export default function LeagueSportsbook({ session }) {
   const boardStake = () => Number(globalStake) || 10;
 
   const selectBetPick = (offering, side) => {
-    if (computeOpponentFor(offering, side, viewer) === viewer) return;
     setBetSlipPick({ offering, side });
   };
 
@@ -1576,14 +1561,12 @@ export default function LeagueSportsbook({ session }) {
       </div>
       <div className="dk-odds-row">
         {o.sides.map((side) => {
-          const disabled = computeOpponentFor(o, side, viewer) === viewer;
           const selected = betSlipPick?.offering?.id === o.id && betSlipPick?.side?.key === side.key;
           return (
             <button
               type="button"
               key={side.key}
               className={`dk-odds-btn${selected ? " selected" : ""}`}
-              disabled={disabled}
               onClick={() => selectBetPick(o, side)}
             >
               <span className="dk-odds-label">{side.label}</span>
@@ -1606,6 +1589,30 @@ export default function LeagueSportsbook({ session }) {
       <div className="dk-event-markets">{markets}</div>
     </div>
   );
+
+  const toggleBoardGroup = (id) => {
+    setCollapsedBoardGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const renderCollapsibleEventCard = (ev) => {
+    const collapsed = collapsedBoardGroups.has(ev.id);
+    return (
+      <div className="dk-event" key={ev.id}>
+        <button type="button" className="dk-event-header dk-event-header-toggle" onClick={() => toggleBoardGroup(ev.id)}>
+          <div>
+            <div className="dk-event-title">{ev.title}</div>
+            {ev.subtitle && <div className="dk-event-sub">{ev.subtitle}</div>}
+          </div>
+          <ChevronRight size={18} className={`dk-event-chevron${collapsed ? "" : " expanded"}`} />
+        </button>
+        {!collapsed && <div className="dk-event-markets">{ev.markets.map(renderMarketRow)}</div>}
+      </div>
+    );
+  };
 
   const renderBetSlipBar = () => {
     if (!betSlipPick) return null;
@@ -1686,13 +1693,12 @@ export default function LeagueSportsbook({ session }) {
     const stake = boardStake();
     if (stake < 1) return;
 
-    let opponent = "";
     let title = offering.title;
     const bet = {
       type: offering.type,
       title,
       creator: viewer,
-      opponent: "",
+      opponent: null, // open — any other league member may accept
       stake,
       status: "pending",
       result: null,
@@ -1704,21 +1710,11 @@ export default function LeagueSportsbook({ session }) {
     };
 
     if (offering.kind === "lineup_ml") {
-      opponent = offering.counterpartyId
-        || (side.memberId === offering.memberA ? offering.memberB : offering.memberA);
-      if (opponent === viewer) {
-        window.alert("Pick the other side — you can't bet against yourself.");
-        return;
-      }
-      bet.opponent = opponent;
       bet.pickMemberId = side.memberId;
       bet.matchupPeerId = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
-      title = `${nameOf(side.memberId)} lineup beats ${nameOf(opponent)} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
+      title = `${nameOf(side.memberId)} lineup beats ${nameOf(bet.matchupPeerId)} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "lineup_spread") {
-      opponent = offering.counterpartyId;
-      if (!opponent || opponent === viewer) return;
-      bet.opponent = opponent;
       bet.subjectId = offering.favoriteId;
       bet.matchupPeerId = offering.underdogId;
       bet.line = offering.line;
@@ -1726,11 +1722,6 @@ export default function LeagueSportsbook({ session }) {
       title = `${side.label} covers @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "player_ou") {
-      opponent = offering.counterpartyId
-        || members.find((m) => m.id !== viewer && m.id !== offering.ownerId)?.id
-        || members.find((m) => m.id !== viewer)?.id;
-      if (!opponent) return;
-      bet.opponent = opponent;
       bet.playerId = offering.playerId;
       bet.line = offering.line;
       bet.creatorSide = side.pick;
@@ -1738,60 +1729,32 @@ export default function LeagueSportsbook({ session }) {
       title = `${playerLabel(players, offering.playerId)} ${side.pick === "over" ? "Over" : "Under"} ${offering.line} pts @ ${formatOdds(side.odds)}`;
       bet.title = title;
     } else if (offering.kind === "lineup_ou") {
-      opponent = offering.counterpartyId
-        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
-        || members.find((m) => m.id !== viewer)?.id;
-      if (!opponent) return;
-      bet.opponent = opponent;
       bet.line = offering.line;
       bet.creatorSide = side.pick;
       bet.subjectId = offering.subjectId;
       title = `${nameOf(offering.subjectId)} lineup ${side.pick === "over" ? "Over" : "Under"} ${offering.line} pts @ ${formatOdds(side.odds)}`;
       bet.title = title;
     } else if (offering.kind === "player_h2h") {
-      opponent = side.memberId === offering.memberA ? offering.memberB : offering.memberA;
-      if (opponent === viewer) {
-        window.alert("Pick the other side — you can't bet against yourself.");
-        return;
-      }
-      bet.opponent = opponent;
       bet.playerIdA = offering.playerIdA;
       bet.playerIdB = offering.playerIdB;
       bet.pickPlayerId = side.playerId;
       title = `${playerLabel(players, side.playerId)} beats ${playerLabel(players, side.playerId === offering.playerIdA ? offering.playerIdB : offering.playerIdA)} @ ${formatOdds(side.odds)}`;
       bet.title = title;
     } else if (SINGLE_PICK_BOARD_KINDS.includes(offering.kind)) {
-      opponent = offering.counterpartyId
-        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
-        || members.find((m) => m.id !== viewer)?.id;
-      if (!opponent) return;
-      bet.opponent = opponent;
       bet.subjectId = offering.subjectId;
       title = `${side.label} @ ${formatOdds(side.odds)}`;
       bet.title = title;
     } else if (offering.kind === "weekly_blowout" || offering.kind === "weekly_closest") {
-      opponent = offering.counterpartyId
-        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId && m.id !== offering.matchupPeerId)?.id
-        || members.find((m) => m.id !== viewer)?.id;
-      if (!opponent) return;
-      bet.opponent = opponent;
       bet.subjectId = offering.subjectId;
       bet.matchupPeerId = offering.matchupPeerId;
       title = `${side.label} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "season_playoffs") {
-      opponent = offering.counterpartyId
-        || members.find((m) => m.id !== viewer && m.id !== offering.subjectId)?.id
-        || members.find((m) => m.id !== viewer)?.id;
-      if (!opponent) return;
-      bet.opponent = opponent;
       bet.subjectId = offering.subjectId;
       bet.creatorSide = side.pick;
       title = `${side.label} @ ${formatOdds(side.odds)}`;
       bet.title = title;
     }
-
-    if (!bet.opponent) return;
 
     betsApi.insertBet(league.dbId, bet, dbIdByOwnerId).catch((err) => {
       window.alert(err.message || "Couldn't place that bet — try again.");
@@ -1804,8 +1767,7 @@ export default function LeagueSportsbook({ session }) {
   function openBuilderCategory(cat) {
     const oppDefault = matchupOpponent?.id || defaultOpponent;
     if (cat === "matchup") setMatchupBuilder((f) => ({ ...f, opponent: f.opponent || oppDefault }));
-    if (cat === "total") setTotalBuilder((f) => ({ ...f, subjectId: f.subjectId || viewer, opponent: f.opponent || oppDefault }));
-    if (cat === "prop") setPropBuilder((f) => ({ ...f, opponent: f.opponent || oppDefault }));
+    if (cat === "total") setTotalBuilder((f) => ({ ...f, subjectId: f.subjectId || viewer }));
     setBuilderCategory(cat);
   }
 
@@ -1934,18 +1896,16 @@ export default function LeagueSportsbook({ session }) {
 
   function renderTotalBuilder() {
     const subjMember = activeWeekMembers.find((m) => m.id === totalBuilder.subjectId) || boardViewerMember;
-    const oppMember = activeWeekMembers.find((m) => m.id === totalBuilder.opponent) || null;
     const subjProj = subjMember ? (sumLineupProjections(subjMember, activeProjections) ?? 0) : 0;
     const defaultLine = betLineFromProj(subjProj) ?? 0;
     const line = totalBuilder.line !== "" ? Number(totalBuilder.line) : defaultLine;
 
-    const offering = (subjMember && oppMember) ? {
+    const offering = subjMember ? {
       id: `builder-total-${activeWeek}-${subjMember.id}`,
       kind: "lineup_ou", type: "prop", week: activeWeek,
       title: `${subjMember.name} lineup O/U ${formatProj(line)} fantasy pts`,
       subtitle: `Week ${activeWeek} · projected ${formatProj(subjProj)}`,
       subjectId: subjMember.id,
-      counterpartyId: oppMember.id,
       line,
       sides: [
         { key: "over", label: `Over ${formatProj(line)}`, pick: "over", odds: -110 },
@@ -1961,13 +1921,6 @@ export default function LeagueSportsbook({ session }) {
             <label>Team</label>
             <select value={totalBuilder.subjectId} onChange={(e) => setTotalBuilder((f) => ({ ...f, subjectId: e.target.value, line: "" }))}>
               {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-          <div className="sb-field">
-            <label>Against</label>
-            <select value={totalBuilder.opponent} onChange={(e) => setTotalBuilder((f) => ({ ...f, opponent: e.target.value }))}>
-              <option value="">Select a manager…</option>
-              {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div className="sb-field" style={{ maxWidth: 120 }}>
@@ -1991,11 +1944,10 @@ export default function LeagueSportsbook({ session }) {
     const proj = propBuilder.playerId ? sleeperProj(propBuilder.playerId, activeProjections) : null;
     const defaultLine = betLineFromProj(proj) ?? 0;
     const line = propBuilder.line !== "" ? Number(propBuilder.line) : defaultLine;
-    const oppMember = members.find((m) => m.id === propBuilder.opponent) || null;
 
     let offering = null;
-    if (propBuilder.playerId && oppMember) {
-      offering = buildSinglePlayerOuOffering(propBuilder.playerId, ownerMember?.id || null, oppMember.id, activeWeek, players, activeProjections);
+    if (propBuilder.playerId) {
+      offering = buildSinglePlayerOuOffering(propBuilder.playerId, ownerMember?.id || null, null, activeWeek, players, activeProjections);
       if (offering) offering.line = line;
     }
 
@@ -2006,14 +1958,7 @@ export default function LeagueSportsbook({ session }) {
           <div className="sb-field">
             <label>Player</label>
             <select value={propBuilder.playerId} onChange={(e) => {
-              const pid = e.target.value;
-              const owner = findPlayerOwner(activeWeekMembers, pid);
-              setPropBuilder((f) => ({
-                ...f,
-                playerId: pid,
-                opponent: f.opponent || (owner && owner.id !== viewer ? owner.id : defaultOpponent),
-                line: "",
-              }));
+              setPropBuilder((f) => ({ ...f, playerId: e.target.value, line: "" }));
             }}>
               <option value="">Select a player…</option>
               {activeWeekMembers.map((m) => (
@@ -2025,13 +1970,6 @@ export default function LeagueSportsbook({ session }) {
                     ))}
                 </optgroup>
               ))}
-            </select>
-          </div>
-          <div className="sb-field">
-            <label>Against</label>
-            <select value={propBuilder.opponent} onChange={(e) => setPropBuilder((f) => ({ ...f, opponent: e.target.value }))}>
-              <option value="">Select a manager…</option>
-              {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           </div>
           <div className="sb-field" style={{ maxWidth: 120 }}>
@@ -2151,6 +2089,7 @@ export default function LeagueSportsbook({ session }) {
     const patch = {
       accept: { status: "accepted" },
       decline: { status: "declined" },
+      cancel: { status: "cancelled" },
       lock: { status: "locked" },
       "grade-creator": { status: "settled", result: "creator" },
       "grade-opponent": { status: "settled", result: "opponent" },
@@ -2160,6 +2099,15 @@ export default function LeagueSportsbook({ session }) {
       await betsApi.updateBetStatus(betId, patch);
     } catch (err) {
       setBetErrors((e) => ({ ...e, [betId]: err.message || "Couldn't update that bet — try again." }));
+    }
+  }
+
+  async function acceptOpenBet(betId) {
+    setBetErrors((e) => ({ ...e, [betId]: null }));
+    try {
+      await betsApi.updateBetStatus(betId, { status: "accepted", opponent: dbIdByOwnerId[viewer] });
+    } catch (err) {
+      setBetErrors((e) => ({ ...e, [betId]: err.message || "Couldn't accept that bet — try again." }));
     }
   }
 
@@ -2368,7 +2316,7 @@ export default function LeagueSportsbook({ session }) {
     if (!form.title.trim()) return;
     const newBet = {
       type: form.type,
-      title: form.title.trim(), creator: viewer, opponent: form.opponent,
+      title: form.title.trim(), creator: viewer, opponent: null,
       stake: Number(form.stake) || 0, status: "pending", result: null,
       ...(isWeeklyBet(form.type) ? { week: Number(form.week) || Number(league.week) || 1 } : {}),
       ...(form.type === "prop"
@@ -2379,7 +2327,7 @@ export default function LeagueSportsbook({ session }) {
       window.alert(err.message || "Couldn't post that slip — try again.");
     });
     setForm({
-      type: "matchup", title: "", opponent: defaultOpponent, stake: 10,
+      type: "matchup", title: "", stake: 10,
       week: activeWeek,
       playerId: "", line: "", creatorSide: "over",
     });
@@ -2390,6 +2338,9 @@ export default function LeagueSportsbook({ session }) {
 
   function renderBetSlip(b) {
     const s = STATUS_STYLE[b.status] || STATUS_STYLE.pending;
+    const isViewerCreator = b.creator === viewer;
+    const isOpen = b.opponent == null;
+    const canAcceptOpen = b.status === "pending" && isOpen && !isViewerCreator;
     const isViewerOpponent = b.opponent === viewer && b.status === "pending";
     const canAuto = AUTO_GRADABLE[b.type] && b.status === "locked";
     return (
@@ -2400,7 +2351,7 @@ export default function LeagueSportsbook({ session }) {
             <div className="sb-ticket-num">TICKET NO. {b.ticket}</div>
             <div className="sb-ticket-type">{ticketTypeLabel(b)}{b.week ? ` · Wk ${b.week}` : ""}</div>
             <div className="sb-ticket-title">{b.title}</div>
-            <div className="sb-ticket-parties">{nameOf(b.creator)} <span style={{ opacity: 0.5 }}>vs</span> {nameOf(b.opponent)}</div>
+            <div className="sb-ticket-parties">{nameOf(b.creator)} <span style={{ opacity: 0.5 }}>vs</span> {b.opponent ? nameOf(b.opponent) : "Open"}</div>
             {b.odds != null && (
               <div className="sb-ticket-odds">
                 {formatOdds(b.odds)} · win ${b.toWin ?? payoutFromOdds(b.stake, b.odds)}
@@ -2420,16 +2371,27 @@ export default function LeagueSportsbook({ session }) {
           </div>
         ) : b.status === "declined" ? (
           <div className="sb-result-line">Declined — no money moves.</div>
+        ) : b.status === "cancelled" ? (
+          <div className="sb-result-line">Cancelled by {nameOf(b.creator)} — no money moves.</div>
         ) : (
           <>
             <div className="sb-ticket-actions">
+              {b.status === "pending" && canAcceptOpen && (
+                <button className="sb-btn sb-btn-accept" onClick={() => acceptOpenBet(b.id)}><Check size={12} /> Accept this bet</button>
+              )}
               {b.status === "pending" && isViewerOpponent && (
                 <>
                   <button className="sb-btn sb-btn-accept" onClick={() => advance(b.id, "accept")}><Check size={12} /> Accept</button>
                   <button className="sb-btn sb-btn-decline" onClick={() => advance(b.id, "decline")}><X size={12} /> Decline</button>
                 </>
               )}
-              {b.status === "pending" && !isViewerOpponent && (
+              {b.status === "pending" && isViewerCreator && (
+                <>
+                  <span className="sb-result-line">{isOpen ? "Open — waiting for someone to accept." : `Waiting on ${nameOf(b.opponent)} to accept.`}</span>
+                  <button className="sb-btn sb-btn-decline" onClick={() => advance(b.id, "cancel")}><X size={12} /> Cancel</button>
+                </>
+              )}
+              {b.status === "pending" && !isViewerCreator && !isOpen && !isViewerOpponent && (
                 <span className="sb-result-line">Waiting on {nameOf(b.opponent)} to accept.</span>
               )}
               {b.status === "accepted" && (
@@ -2458,7 +2420,7 @@ export default function LeagueSportsbook({ session }) {
   }
 
   const weekSlipSummary = useMemo(() => {
-    const open = weekBets.filter((b) => b.status !== "settled" && b.status !== "declined");
+    const open = weekBets.filter((b) => !["settled", "declined", "cancelled"].includes(b.status));
     return {
       total: weekBets.length,
       open: open.length,
@@ -2584,12 +2546,6 @@ export default function LeagueSportsbook({ session }) {
                     <option value="proposition">League Prop</option>
                   </select>
                 </div>
-                <div className="sb-field">
-                  <label>Against</label>
-                  <select value={form.opponent} onChange={(e) => setForm({ ...form, opponent: e.target.value })}>
-                    {members.filter((m) => m.id !== viewer).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                </div>
                 <div className="sb-field" style={{ maxWidth: 110 }}>
                   <label>Stake ($)</label>
                   <input type="number" min="1" value={form.stake} onChange={(e) => setForm({ ...form, stake: e.target.value })} />
@@ -2679,7 +2635,7 @@ export default function LeagueSportsbook({ session }) {
                   </div>
                 </div>
               ) : (
-                weeklyBoardEvents.map((ev) => renderEventCard(ev.title, ev.subtitle, ev.markets.map(renderMarketRow), ev.id))
+                weeklyBoardEvents.map(renderCollapsibleEventCard)
               )}
             </div>
 
@@ -2690,7 +2646,7 @@ export default function LeagueSportsbook({ session }) {
                   <div className="sb-empty">No season lines yet — connect your league to see these.</div>
                 </div>
               ) : (
-                seasonBoardEvents.map((ev) => renderEventCard(ev.title, ev.subtitle, ev.markets.map(renderMarketRow), ev.id))
+                seasonBoardEvents.map(renderCollapsibleEventCard)
               )}
             </div>
           </div>

@@ -171,6 +171,9 @@ html, body, #root { margin: 0; min-height: 100%; }
 
 .dk-event { background: var(--felt-dark); border-radius: 8px; margin-bottom: 0.85rem; overflow: hidden; border: 1px solid var(--line); }
 .dk-event-header { padding: 0.85rem 1rem; border-bottom: 1px solid var(--line); background: rgba(0,0,0,0.15); }
+.dk-event-header-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border: none; cursor: pointer; text-align: left; font-family: inherit; color: inherit; }
+.dk-event-chevron { flex-shrink: 0; color: #7ea08f; transform: rotate(0deg); transition: transform 0.15s; }
+.dk-event-chevron.expanded { transform: rotate(90deg); }
 .dk-event-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; font-weight: 400; color: var(--gold-bright); letter-spacing: 0.04em; }
 .dk-event-sub { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #7ea08f; margin-top: 0.15rem; }
 .dk-event-markets { padding: 0.35rem 0; }

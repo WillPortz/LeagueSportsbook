@@ -50,10 +50,10 @@ create table if not exists bets (
   type text not null check (type in ('matchup','prop','season','proposition')),
   title text not null,
   creator uuid not null references members(id),
-  opponent uuid not null references members(id),
+  opponent uuid references members(id),   -- null = open, anyone in the league may accept
   stake numeric not null check (stake > 0),
   status text not null default 'pending'
-    check (status in ('pending','accepted','declined','locked','settled')),
+    check (status in ('pending','accepted','declined','cancelled','locked','settled')),
   result text check (result in ('creator','opponent')),
   week int,
   odds int,
@@ -117,23 +117,32 @@ create trigger members_claim_guard
   for each row execute function enforce_member_claim();
 
 -- ============ bet lifecycle invariant ============
+-- opponent is null until someone accepts an open bet — any league member (other than the
+-- creator) may claim it for themselves; a bet that already has a set opponent (legacy rows
+-- from before open bets, or already-claimed rows) keeps the original opponent-only rules.
 create or replace function enforce_bet_transition() returns trigger as $$
 declare
   my_member_ids uuid[];
   is_creator boolean;
   is_opponent boolean;
+  is_open boolean;
 begin
-  if NEW.league_id <> OLD.league_id or NEW.creator <> OLD.creator or NEW.opponent <> OLD.opponent
+  if NEW.league_id <> OLD.league_id or NEW.creator <> OLD.creator
      or NEW.type <> OLD.type or NEW.stake <> OLD.stake then
     raise exception 'These fields cannot be changed after a bet is placed.';
+  end if;
+  if OLD.opponent is not null and NEW.opponent is distinct from OLD.opponent then
+    raise exception 'This bet''s opponent cannot be changed once set.';
   end if;
 
   select array_agg(id) into my_member_ids
     from members where user_id = auth.uid() and league_id = NEW.league_id;
 
   is_creator  := OLD.creator  = any(my_member_ids);
-  is_opponent := OLD.opponent = any(my_member_ids);
-  if not (is_creator or is_opponent) then
+  is_opponent := OLD.opponent is not null and OLD.opponent = any(my_member_ids);
+  is_open     := OLD.opponent is null and OLD.status = 'pending';
+
+  if not (is_creator or is_opponent or is_open) then
     raise exception 'You are not a party to this bet.';
   end if;
 
@@ -141,14 +150,25 @@ begin
     raise exception 'This bet is already settled.';
   end if;
 
-  if OLD.status = NEW.status then
+  if OLD.status = NEW.status and NEW.opponent is not distinct from OLD.opponent then
     NEW.updated_at := now();
     return NEW;
   end if;
 
-  if OLD.status = 'pending' and NEW.status in ('accepted','declined') then
+  if OLD.status = 'pending' and NEW.status = 'accepted' and OLD.opponent is null then
+    if is_creator then
+      raise exception 'You cannot accept your own bet.';
+    end if;
+    if NEW.opponent is null or not (NEW.opponent = any(my_member_ids)) then
+      raise exception 'You can only accept a bet for your own claimed manager.';
+    end if;
+  elsif OLD.status = 'pending' and NEW.status in ('accepted','declined') then
     if not is_opponent then
       raise exception 'Only the opponent can accept or decline a pending bet.';
+    end if;
+  elsif OLD.status = 'pending' and NEW.status = 'cancelled' then
+    if not is_creator then
+      raise exception 'Only the creator can cancel a pending bet.';
     end if;
   elsif OLD.status = 'accepted' and NEW.status = 'locked' then
     null; -- either party may lock
@@ -199,19 +219,22 @@ create policy bets_select on bets for select using (
   exists (select 1 from members m where m.league_id = bets.league_id and m.user_id = auth.uid())
 );
 
--- a bet may only be created by its creator, and the opponent must be a real member of the league
+-- a bet may only be created by its creator; opponent is either null (open, anyone may accept)
+-- or a real member of the league
 create policy bets_insert on bets for insert with check (
   exists (select 1 from members m  where m.id = bets.creator  and m.user_id = auth.uid() and m.league_id = bets.league_id)
   and
-  exists (select 1 from members m2 where m2.id = bets.opponent and m2.league_id = bets.league_id)
+  (bets.opponent is null or exists (select 1 from members m2 where m2.id = bets.opponent and m2.league_id = bets.league_id))
 );
 
--- only the two parties to a bet may update it at all; exact transition rules live in the trigger above
+-- the two parties to a bet may always update it; any other claimed member of the same league
+-- may also update an open pending bet (to claim/accept it) — exact transition rules live in
+-- the trigger above
 create policy bets_update on bets for update using (
   exists (
     select 1 from members m
     where m.user_id = auth.uid() and m.league_id = bets.league_id
-      and (m.id = bets.creator or m.id = bets.opponent)
+      and (m.id = bets.creator or m.id = bets.opponent or (bets.opponent is null and bets.status = 'pending'))
   )
 );
 

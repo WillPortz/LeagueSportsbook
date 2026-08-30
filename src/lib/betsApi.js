@@ -63,7 +63,7 @@ export async function insertBet(leagueId, bet, dbIdByOwnerId) {
     type: bet.type,
     title: bet.title,
     creator: dbIdByOwnerId[bet.creator],
-    opponent: dbIdByOwnerId[bet.opponent],
+    opponent: bet.opponent ? dbIdByOwnerId[bet.opponent] : null,
     stake: bet.stake,
     week: bet.week ?? null,
     odds: bet.odds ?? null,
