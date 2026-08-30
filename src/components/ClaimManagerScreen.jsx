@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, Users } from "lucide-react";
 
-export default function ClaimManagerScreen({ leagueName, members, onClaim }) {
+export default function ClaimManagerScreen({ leagueName, members, onClaim, onSignOut }) {
   const [claimingId, setClaimingId] = useState(null);
   const [error, setError] = useState(null);
   const unclaimed = members.filter((m) => !m.userId);
@@ -58,6 +58,11 @@ export default function ClaimManagerScreen({ leagueName, members, onClaim }) {
             <div className="sb-error-banner">
               <AlertTriangle size={12} /> {error}
             </div>
+          )}
+          {onSignOut && (
+            <button type="button" className="sb-signout-link" onClick={onSignOut}>
+              Sign out
+            </button>
           )}
         </div>
       </div>

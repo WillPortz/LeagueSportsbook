@@ -2,7 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { signIn, signUp } from "../lib/auth.js";
 
-export default function AuthScreen() {
+export default function AuthScreen({ onDemo }) {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -95,6 +95,16 @@ export default function AuthScreen() {
               </div>
             </form>
           )}
+
+          <div className="sb-demo-cta">
+            <span className="sb-demo-cta-divider">or</span>
+            <button type="button" className="sb-btn sb-btn-demo" onClick={onDemo}>
+              Try the demo →
+            </button>
+            <p className="sb-demo-cta-note">
+              No account, no Sleeper league — jump straight into a fake league to look around.
+            </p>
+          </div>
         </div>
       </div>
     </div>

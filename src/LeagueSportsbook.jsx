@@ -3,9 +3,11 @@ import {
   Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, User, ScrollText,
   Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords,
 } from "lucide-react";
-import * as leaguesApi from "./lib/leaguesApi.js";
-import * as membersApi from "./lib/membersApi.js";
-import * as betsApi from "./lib/betsApi.js";
+import * as realLeaguesApi from "./lib/leaguesApi.js";
+import * as realMembersApi from "./lib/membersApi.js";
+import * as realBetsApi from "./lib/betsApi.js";
+import { demoLeaguesApi, demoMembersApi, demoBetsApi } from "./lib/demoApi.js";
+import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoData.js";
 import { signOut } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
 
@@ -897,12 +899,12 @@ const STATUS_STYLE = {
   cancelled: { label: "CANCELLED", color: "#7a3b3b", rotate: -8 },
 };
 
-function applyBetPatch(prev, payload, ownerIdByDbId) {
+function applyBetPatch(prev, payload, ownerIdByDbId, betsApiModule) {
   const { eventType, new: newRow, old: oldRow } = payload;
   if (eventType === "DELETE") {
     return prev.filter((b) => b.id !== oldRow.id);
   }
-  const mapped = betsApi.dbRowToBet(newRow, ownerIdByDbId);
+  const mapped = betsApiModule.dbRowToBet(newRow, ownerIdByDbId);
   const idx = prev.findIndex((b) => b.id === mapped.id);
   if (idx === -1) return [mapped, ...prev];
   const next = prev.slice();
@@ -910,12 +912,12 @@ function applyBetPatch(prev, payload, ownerIdByDbId) {
   return next;
 }
 
-function applyMemberPatch(prev, payload) {
+function applyMemberPatch(prev, payload, membersApiModule) {
   const { eventType, new: newRow, old: oldRow } = payload;
   if (eventType === "DELETE") {
     return prev.filter((m) => m.dbId !== oldRow.id);
   }
-  const mapped = membersApi.dbRowToMember(newRow);
+  const mapped = membersApiModule.dbRowToMember(newRow);
   const idx = prev.findIndex((m) => m.dbId === mapped.dbId);
   if (idx === -1) return [...prev, mapped];
   const next = prev.slice();
@@ -923,7 +925,11 @@ function applyMemberPatch(prev, payload) {
   return next;
 }
 
-export default function LeagueSportsbook({ session }) {
+export default function LeagueSportsbook({ session, demo = false, onExitDemo }) {
+  const leaguesApi = demo ? demoLeaguesApi : realLeaguesApi;
+  const membersApi = demo ? demoMembersApi : realMembersApi;
+  const betsApi = demo ? demoBetsApi : realBetsApi;
+
   const [league, setLeague] = useState({
     linked: false,
     dbId: null,
@@ -1039,6 +1045,16 @@ export default function LeagueSportsbook({ session }) {
     return () => { cancelled = true; };
   }, [session.user.id]);
 
+  // ---------- demo mode: seed week data locally instead of fetching from Sleeper ----------
+  useEffect(() => {
+    if (!demo) return;
+    weekCacheRef.current = DEMO_WEEK_CACHE;
+    setWeekCache(DEMO_WEEK_CACHE);
+    setPlayers(DEMO_PLAYERS);
+    setPlayoffTeams(DEMO_PLAYOFF_TEAMS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
 
   const fetchLeagueData = useCallback(async (leagueId) => {
     const id = leagueId.trim();
@@ -1072,7 +1088,7 @@ export default function LeagueSportsbook({ session }) {
   }, []);
 
   const connectLeague = useCallback(async (leagueId) => {
-    if (!leagueId.trim()) return;
+    if (demo || !leagueId.trim()) return;
     setLeague((s) => ({ ...s, loading: true, error: null }));
     try {
       const data = await fetchLeagueData(leagueId);
@@ -1121,7 +1137,7 @@ export default function LeagueSportsbook({ session }) {
   }, [session.user.id, league.dbId]);
 
   const refreshLeague = useCallback(async () => {
-    if (!league.leagueId || !league.dbId) return;
+    if (demo || !league.leagueId || !league.dbId) return;
     setLeague((s) => ({ ...s, loading: true, error: null }));
     try {
       const data = await fetchLeagueData(league.leagueId);
@@ -1160,9 +1176,13 @@ export default function LeagueSportsbook({ session }) {
   }, [fetchLeagueData, league.leagueId, league.dbId]);
 
   const disconnectLeague = useCallback(async () => {
+    if (demo) {
+      onExitDemo?.();
+      return;
+    }
     if (!window.confirm("Sign out of this device? Nobody else's data is affected.")) return;
     await signOut();
-  }, []);
+  }, [demo, onExitDemo]);
 
   useEffect(() => {
     if (league.dbId) refreshLeague();
@@ -1178,10 +1198,10 @@ export default function LeagueSportsbook({ session }) {
       if (!cancelled) setBets(rows);
     });
     const offBets = betsApi.subscribeToBets(league.dbId, (payload) => {
-      setBets((prev) => applyBetPatch(prev, payload, ownerIdByDbIdRef.current));
+      setBets((prev) => applyBetPatch(prev, payload, ownerIdByDbIdRef.current, betsApi));
     });
     const offMembers = membersApi.subscribeToMembers(league.dbId, (payload) => {
-      setMembers((prev) => applyMemberPatch(prev, payload));
+      setMembers((prev) => applyMemberPatch(prev, payload, membersApi));
     });
     return () => {
       cancelled = true;
@@ -1193,6 +1213,7 @@ export default function LeagueSportsbook({ session }) {
   const loadWeekData = useCallback(async (weekNum, { force = false, showSpinner = false } = {}) => {
     if (!league.leagueId) return false;
     const wk = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(weekNum) || 1));
+    if (demo) return Boolean(weekCacheRef.current[wk]);
 
     if (!force && weekCacheRef.current[wk]) return true;
     if (loadingWeeksRef.current.has(wk)) {
@@ -1349,9 +1370,10 @@ export default function LeagueSportsbook({ session }) {
   );
 
   useEffect(() => {
+    if (demo) return;
     weekCacheRef.current = {};
     setWeekCache({});
-  }, [league.scoringField, league.season, league.projectionSeason]);
+  }, [demo, league.scoringField, league.season, league.projectionSeason]);
 
   useEffect(() => {
     if (!leagueReady || !league.leagueId) return;
@@ -2467,12 +2489,15 @@ export default function LeagueSportsbook({ session }) {
                 <AlertTriangle size={12} /> {league.error}
               </div>
             )}
+            <button type="button" className="sb-signout-link" onClick={disconnectLeague}>
+              Sign out
+            </button>
           </div>
         </div>
       )}
 
       {league.linked && !viewer && (
-        <ClaimManagerScreen leagueName={league.leagueName} members={members} onClaim={handleClaim} />
+        <ClaimManagerScreen leagueName={league.leagueName} members={members} onClaim={handleClaim} onSignOut={disconnectLeague} />
       )}
 
       {leagueReady && (
@@ -2480,7 +2505,10 @@ export default function LeagueSportsbook({ session }) {
       <div className="sb-marquee">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <div className="sb-marquee-title sb-display">League Sportsbook</div>
+            <div className="sb-marquee-title sb-display">
+              League Sportsbook
+              {demo && <span className="sb-demo-badge">Demo Mode</span>}
+            </div>
             <div className="sb-marquee-sub">
               {league.leagueName} · {league.projectionSeason} NFL · Week {currentWeek}
               {league.nflSeasonType && league.nflSeasonType !== "regular" ? ` · NFL ${league.nflSeasonType}` : ""}
@@ -2892,24 +2920,30 @@ export default function LeagueSportsbook({ session }) {
           <div>
             <div className="sb-board">
               <h3>{league.leagueName}</h3>
-              <p className="sb-note">
-                Linked to Sleeper league <span className="sb-mono">{league.leagueId}</span>.
-                Scores and projections for weeks 1–{currentWeek} load automatically
-                {loadedWeekCount < currentWeek ? ` (${loadedWeekCount} of ${currentWeek} ready…)` : "."}
-              </p>
+              {demo ? (
+                <p className="sb-note">This is a demo league — nothing here is saved, and no real Sleeper or account data is used.</p>
+              ) : (
+                <p className="sb-note">
+                  Linked to Sleeper league <span className="sb-mono">{league.leagueId}</span>.
+                  Scores and projections for weeks 1–{currentWeek} load automatically
+                  {loadedWeekCount < currentWeek ? ` (${loadedWeekCount} of ${currentWeek} ready…)` : "."}
+                </p>
+              )}
               <div className="sb-form-actions">
-                <button
-                  className="sb-btn sb-btn-submit"
-                  onClick={async () => {
-                    await refreshLeague();
-                    await prefetchSeasonWeeks(currentWeek, { force: true });
-                  }}
-                  disabled={league.loading}
-                >
-                  <RefreshCw size={12} /> {league.loading ? "Syncing…" : "Refresh league"}
-                </button>
+                {!demo && (
+                  <button
+                    className="sb-btn sb-btn-submit"
+                    onClick={async () => {
+                      await refreshLeague();
+                      await prefetchSeasonWeeks(currentWeek, { force: true });
+                    }}
+                    disabled={league.loading}
+                  >
+                    <RefreshCw size={12} /> {league.loading ? "Syncing…" : "Refresh league"}
+                  </button>
+                )}
                 <button className="sb-btn sb-btn-decline" onClick={disconnectLeague}>
-                  Sign out
+                  {demo ? "Exit Demo" : "Sign out"}
                 </button>
               </div>
               {league.error && <div className="sb-error-banner"><AlertTriangle size={12} /> {league.error}</div>}
