@@ -272,9 +272,13 @@ async function fetchSleeperProjections(
       const pts = projectionPointsFromSleeper(row.stats, scoringField, scoringSettings);
       if (pts != null) byPlayer[String(row.player_id)] = pts;
     });
+    // A forced refresh is authoritative: if Sleeper no longer lists a player at all (dropped
+    // from the feed rather than given an explicit 0 — e.g. ruled out), clear the stale number
+    // instead of leaving it behind.
     ids.forEach((id) => {
       const pts = byPlayer[String(id)];
       if (pts != null) weekCache[id] = pts;
+      else if (force) delete weekCache[id];
     });
     cache[cacheKey] = weekCache;
     try {
@@ -1387,6 +1391,33 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       offPicks();
     };
   }, [league.dbId]);
+
+  // ---------- proactively void bets the moment a player's projection drops to 0 ----------
+  // Runs on every bets/weekCache change (i.e. every poll), not just when someone clicks
+  // Auto-grade — a bet can be voided before its player's game even starts. Naturally
+  // idempotent: once a bet is void it no longer matches the pending/accepted/locked filter.
+  useEffect(() => {
+    if (!leagueReady) return;
+    bets.forEach((b) => {
+      if (!["pending", "accepted", "locked"].includes(b.status)) return;
+      const projections = weekCache[Number(b.week)]?.projections;
+      if (!projections) return;
+      // Sleeper often drops a ruled-out player from the feed entirely rather than sending an
+      // explicit 0 — once this week's projections have loaded at all, no entry for the player
+      // means the same thing as a 0: they're not projected to play.
+      const zeroed = (pid) => {
+        if (!pid) return false;
+        const p = sleeperProj(pid, projections);
+        return p === 0 || p === null;
+      };
+      const shouldVoid = (b.playerIdA && b.playerIdB)
+        ? (zeroed(b.playerIdA) || zeroed(b.playerIdB))
+        : zeroed(b.playerId);
+      if (shouldVoid) {
+        betsApi.updateBetStatus(b.id, { status: "void" }).catch(() => {});
+      }
+    });
+  }, [bets, weekCache, leagueReady, betsApi]);
 
   const loadWeekData = useCallback(async (weekNum, { force = false, showSpinner = false } = {}) => {
     if (!league.leagueId) return false;

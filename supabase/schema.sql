@@ -156,6 +156,7 @@ declare
   is_creator boolean;
   is_opponent boolean;
   is_open boolean;
+  is_league_member boolean;
 begin
   if NEW.league_id <> OLD.league_id or NEW.creator <> OLD.creator
      or NEW.type <> OLD.type or NEW.stake <> OLD.stake then
@@ -168,11 +169,14 @@ begin
   select array_agg(id) into my_member_ids
     from members where user_id = auth.uid() and league_id = NEW.league_id;
 
-  is_creator  := OLD.creator  = any(my_member_ids);
-  is_opponent := OLD.opponent is not null and OLD.opponent = any(my_member_ids);
-  is_open     := OLD.opponent is null and OLD.status = 'pending';
+  is_creator       := OLD.creator  = any(my_member_ids);
+  is_opponent      := OLD.opponent is not null and OLD.opponent = any(my_member_ids);
+  is_open          := OLD.opponent is null and OLD.status = 'pending';
+  is_league_member := coalesce(array_length(my_member_ids, 1), 0) > 0;
 
-  if not (is_creator or is_opponent or is_open) then
+  -- voiding (player never plays / projects to 0) is a system correction, not a party decision —
+  -- any claimed member of the league may trigger it, whichever browser happens to notice first
+  if not (is_creator or is_opponent or is_open or (NEW.status = 'void' and is_league_member)) then
     raise exception 'You are not a party to this bet.';
   end if;
 
@@ -206,8 +210,8 @@ begin
     if NEW.result is null then
       raise exception 'A result is required to settle a bet.';
     end if;
-  elsif OLD.status = 'locked' and NEW.status = 'void' then
-    null; -- either party may void once a player in the bet never recorded stats for that week
+  elsif OLD.status in ('pending', 'accepted', 'locked') and NEW.status = 'void' then
+    null; -- any league member may void once a player in the bet projects to 0 / never plays
   else
     raise exception 'Invalid bet status transition from % to %.', OLD.status, NEW.status;
   end if;
