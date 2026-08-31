@@ -14,6 +14,7 @@ import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
 
 const BUILD_STAMP = "DEV";
 const REGULAR_SEASON_WEEKS = 18;
+const PROJECTIONS_POLL_MS = 60000;
 
 function resolveRegularSeasonSchedule(nflState, leagueData) {
   const season = Number(
@@ -1699,6 +1700,18 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     const viewWeek = tab === "matchup" ? matchupWeek : activeWeek;
     loadWeekData(viewWeek, { showSpinner: true });
   }, [leagueReady, league.leagueId, activeWeek, matchupWeek, tab, loadWeekData]);
+
+  // ---------- keep the current week's player/team projections & live scores fresh ----------
+  // Sleeper updates these throughout the week (injury news, lineup locks, in-game stats), so
+  // silently re-fetch on an interval instead of only ever showing what was cached on first load.
+  useEffect(() => {
+    if (demo || !leagueReady || !league.leagueId) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      loadWeekData(currentWeek, { force: true });
+    }, PROJECTIONS_POLL_MS);
+    return () => clearInterval(interval);
+  }, [demo, leagueReady, league.leagueId, currentWeek, loadWeekData]);
 
   const weekBets = useMemo(
     () => bets.filter((b) => Number(b.week) === activeWeek),
