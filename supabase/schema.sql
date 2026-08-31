@@ -54,7 +54,7 @@ create table if not exists bets (
   opponent uuid references members(id),   -- null = open, anyone in the league may accept
   stake numeric not null check (stake > 0),
   status text not null default 'pending'
-    check (status in ('pending','accepted','declined','cancelled','locked','settled')),
+    check (status in ('pending','accepted','declined','cancelled','locked','settled','void')),
   result text check (result in ('creator','opponent')),
   week int,
   odds int,
@@ -206,6 +206,8 @@ begin
     if NEW.result is null then
       raise exception 'A result is required to settle a bet.';
     end if;
+  elsif OLD.status = 'locked' and NEW.status = 'void' then
+    null; -- either party may void once a player in the bet never recorded stats for that week
   else
     raise exception 'Invalid bet status transition from % to %.', OLD.status, NEW.status;
   end if;

@@ -240,6 +240,7 @@ async function fetchSleeperProjections(
   seasonType = "regular",
   scoringField = "pts_ppr",
   scoringSettings = null,
+  force = false,
 ) {
   const ids = [...new Set(playerIds.filter(Boolean))];
   if (!ids.length) return {};
@@ -255,7 +256,9 @@ async function fetchSleeperProjections(
     cache = {};
   }
   const weekCache = { ...(cache[cacheKey] || {}) };
-  const missing = ids.filter((id) => weekCache[id] == null);
+  // `force` bypasses the cache-hit check entirely — a cached projection never expires on its
+  // own otherwise, so a background/manual refresh would silently keep serving stale numbers.
+  const missing = force ? ids : ids.filter((id) => weekCache[id] == null);
 
   if (missing.length) {
     const res = await fetch(
@@ -1027,6 +1030,7 @@ const STATUS_STYLE = {
   locked: { label: "LOCKED", color: "#7a3b3b", rotate: -10 },
   settled: { label: "GRADED", color: "#4b4b4b", rotate: -6 },
   cancelled: { label: "CANCELLED", color: "#7a3b3b", rotate: -8 },
+  void: { label: "VOID", color: "#5b5b7a", rotate: -7 },
 };
 
 function applyBetPatch(prev, payload, ownerIdByDbId, betsApiModule) {
@@ -1441,6 +1445,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         "regular",
         scoring.field,
         leagueData?.scoring_settings || null,
+        force,
       );
 
       const entry = { matchups: map, projections };
@@ -2481,6 +2486,14 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       }
     }
 
+    async function voidBet() {
+      try {
+        await betsApi.updateBetStatus(bet.id, { status: "void" });
+      } catch (err) {
+        setBetErrors((e) => ({ ...e, [bet.id]: err.message || "Couldn't void this bet — try again." }));
+      }
+    }
+
     if (bet.type === "matchup") {
       if (bet.boardKind === "lineup_spread" && bet.subjectId && bet.matchupPeerId) {
         const fav = members.find((m) => m.id === bet.subjectId);
@@ -2602,6 +2615,10 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         const ptsA = getPlayerPts(weekData, members, bet.playerIdA);
         const ptsB = getPlayerPts(weekData, members, bet.playerIdB);
         if (ptsA == null || ptsB == null) {
+          if (wk < currentWeek) {
+            await voidBet();
+            return;
+          }
           setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
           return;
         }
@@ -2647,6 +2664,10 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       }
       const row = Object.values(weekData).find((r) => r.players_points && bet.playerId in r.players_points);
       if (!row) {
+        if (wk < currentWeek) {
+          await voidBet();
+          return;
+        }
         setBetErrors((e) => ({ ...e, [bet.id]: `Week ${wk} scores aren't available yet.` }));
         return;
       }
@@ -2722,6 +2743,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           <div className="sb-result-line">Declined — no money moves.</div>
         ) : b.status === "cancelled" ? (
           <div className="sb-result-line">Cancelled by {nameOf(b.creator)} — no money moves.</div>
+        ) : b.status === "void" ? (
+          <div className="sb-result-line">Voided — a player in this bet didn't play. No money moves.</div>
         ) : (
           <>
             <div className="sb-ticket-actions">
@@ -2769,7 +2792,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   }
 
   const weekSlipSummary = useMemo(() => {
-    const open = weekBets.filter((b) => !["settled", "declined", "cancelled"].includes(b.status));
+    const open = weekBets.filter((b) => !["settled", "declined", "cancelled", "void"].includes(b.status));
     return {
       total: weekBets.length,
       open: open.length,
