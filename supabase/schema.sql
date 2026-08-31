@@ -16,7 +16,19 @@ create table if not exists leagues (
   current_week int not null default 1,
   ticket_seq int not null default 1000,   -- next ticket number = ticket_seq + 1 (mirrors old TICKET_SEQ=1001)
   pool_entry_fee numeric not null default 5,
-  created_by uuid references auth.users(id),
+  -- created_by: immutable record of who originally connected this league. owner_id: the
+  -- current commissioner/billing owner — starts the same as created_by but is meant to be
+  -- reassignable later (transfer-ownership UI doesn't exist yet, but the column does).
+  -- Both default to auth.uid() so a normal insert (via upsertLeague's INSERT branch) sets them
+  -- for free; neither is ever included in the app's routine upsert payloads, so later
+  -- refreshLeague/connectLeague calls from any member never touch them again.
+  created_by uuid references auth.users(id) default auth.uid(),
+  owner_id uuid references auth.users(id) default auth.uid(),
+  -- subscription_status: per-league plan/billing state. One owner's payment (once that's
+  -- built) unlocks the whole league. No enum constraint on purpose: the real payment
+  -- integration will likely need states like 'trialing'/'past_due'/'canceled' that aren't
+  -- worth guessing at yet.
+  subscription_status text not null default 'active',
   created_at timestamptz not null default now()
 );
 

@@ -18,6 +18,9 @@ let demoLeagueRow = {
   projection_season: DEMO_SEASON,
   current_week: DEMO_CURRENT_WEEK,
   pool_entry_fee: 5,
+  created_by: DEMO_USER_ID,
+  owner_id: DEMO_USER_ID,
+  subscription_status: "active",
 };
 
 function makePubSub() {

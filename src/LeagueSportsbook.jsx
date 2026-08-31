@@ -1096,6 +1096,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     scoringLabel: "PPR",
     projectionSeason: new Date().getFullYear(),
     poolEntryFee: 5,
+    ownerId: null,
+    subscriptionStatus: "active",
     inputId: "",
   });
   const [members, setMembers] = useState([]);
@@ -1194,6 +1196,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           scoringLabel: leagueRow.scoring_label,
           projectionSeason: leagueRow.projection_season,
           poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
+          ownerId: leagueRow.owner_id,
+          subscriptionStatus: leagueRow.subscription_status || "active",
           inputId: leagueRow.sleeper_league_id,
         }));
         setSelectedWeek(leagueRow.current_week);
@@ -1274,6 +1278,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         nflSeasonType: data.nflSeasonType,
         scoringField: data.scoringField,
         scoringLabel: data.scoringLabel,
+        ownerId: leagueRow.owner_id,
+        subscriptionStatus: leagueRow.subscription_status || "active",
         loading: false,
         error: null,
         inputId: leagueId.trim(),
@@ -1321,6 +1327,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         nflSeasonType: data.nflSeasonType,
         scoringField: data.scoringField,
         scoringLabel: data.scoringLabel,
+        ownerId: leagueRow.owner_id,
+        subscriptionStatus: leagueRow.subscription_status || "active",
         loading: false,
         error: null,
       }));
@@ -3305,7 +3313,14 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         {tab === "sync" && (
           <div>
             <div className="sb-board">
-              <h3>{league.leagueName}</h3>
+              <h3>
+                {league.leagueName}
+                {league.ownerId && session.user.id === league.ownerId && (
+                  <span className="sb-league-badge" style={{ marginLeft: "0.6rem", verticalAlign: "middle" }}>
+                    You're the league owner
+                  </span>
+                )}
+              </h3>
               {demo ? (
                 <p className="sb-note">This is a demo league — nothing here is saved, and no real Sleeper or account data is used.</p>
               ) : (
