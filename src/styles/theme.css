@@ -38,6 +38,14 @@ html, body, #root { margin: 0; min-height: 100%; }
 
 .sb-viewer-select { background: var(--felt-dark); border: 1px solid var(--line); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 3px; }
 
+.sb-league-picker { position: relative; }
+.sb-league-picker-btn { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+.sb-league-picker-menu { position: absolute; top: calc(100% + 0.35rem); left: 0; min-width: 12rem; max-width: min(16rem, 90vw); background: var(--felt-dark); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 8px 20px rgba(0,0,0,0.35); z-index: 50; display: flex; flex-direction: column; padding: 0.3rem; gap: 0.15rem; }
+.sb-league-picker-item { text-align: left; background: transparent; border: none; color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.45rem 0.6rem; border-radius: 3px; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; }
+.sb-league-picker-item:hover { background: rgba(201, 162, 39, 0.12); }
+.sb-league-picker-item.active { color: var(--gold-bright); font-weight: 600; }
+.sb-league-picker-add { border-top: 1px solid var(--line); margin-top: 0.15rem; padding-top: 0.55rem; color: #9ad6b3; }
+
 .sb-tabs { display: flex; gap: 0.3rem; padding: 0.9rem 1.25rem 0; flex-wrap: wrap; }
 .sb-tab { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.04em; padding: 0.5rem 1.1rem 0.6rem; color: #a9c4b6; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; }
 .sb-tab.active { color: var(--gold-bright); border-bottom-color: var(--gold); }

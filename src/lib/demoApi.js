@@ -58,9 +58,9 @@ export const demoMembersApi = {
   async fetchMembers() {
     return memberRows.map((m) => ({ ...m }));
   },
-  async findMyMembership(userId) {
-    if (userId !== DEMO_USER_ID) return null;
-    return { leagues: demoLeagueRow };
+  async findMyMemberships(userId) {
+    if (userId !== DEMO_USER_ID) return [];
+    return [{ leagues: demoLeagueRow }];
   },
   async claimMember(memberDbId) {
     const row = memberRows.find((m) => m.dbId === memberDbId);

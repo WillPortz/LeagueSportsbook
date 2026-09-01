@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
-  Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, Users, User, ScrollText,
+  Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, ChevronDown, Users, User, ScrollText,
   Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords, Coins,
 } from "lucide-react";
 import * as realLeaguesApi from "./lib/leaguesApi.js";
@@ -9,7 +9,7 @@ import * as realBetsApi from "./lib/betsApi.js";
 import * as realPoolApi from "./lib/poolApi.js";
 import { demoLeaguesApi, demoMembersApi, demoBetsApi, demoPoolApi } from "./lib/demoApi.js";
 import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoData.js";
-import { signOut } from "./lib/auth.js";
+import { signOut, updateLastActiveLeague } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
 
 const BUILD_STAMP = "DEV";
@@ -1119,6 +1119,12 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   const [tab, setTab] = useState("slips");
   const [showForm, setShowForm] = useState(false);
   const [betErrors, setBetErrors] = useState({});
+  const [myLeagues, setMyLeagues] = useState([]);
+  const [leaguePickerOpen, setLeaguePickerOpen] = useState(false);
+  const [addingLeague, setAddingLeague] = useState(false);
+  const [addLeagueId, setAddLeagueId] = useState("");
+  const [addLeagueError, setAddLeagueError] = useState(null);
+  const [addLeagueLoading, setAddLeagueLoading] = useState(false);
 
   const viewer = useMemo(
     () => members.find((m) => m.userId === session.user.id)?.id || "",
@@ -1177,39 +1183,84 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   const ownerIdByDbIdRef = useRef({});
   useEffect(() => { ownerIdByDbIdRef.current = ownerIdByDbId; }, [ownerIdByDbId]);
 
-  // ---------- bootstrap: does this account already belong to a league? ----------
+  // Applies a raw `leagues` DB row (as returned by findMyMemberships/connectLeague/upsertLeague)
+  // to the active `league` state — shared by bootstrap, switchLeague, and adding a new league,
+  // so "which league's details are showing" always comes from one place.
+  const applyLeagueRow = useCallback((leagueRow) => {
+    setLeague((s) => ({
+      ...s,
+      linked: true,
+      dbId: leagueRow.id,
+      leagueId: leagueRow.sleeper_league_id,
+      leagueName: leagueRow.name,
+      week: leagueRow.current_week,
+      season: leagueRow.season,
+      nflSeasonType: leagueRow.nfl_season_type,
+      scoringField: leagueRow.scoring_field,
+      scoringLabel: leagueRow.scoring_label,
+      projectionSeason: leagueRow.projection_season,
+      poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
+      ownerId: leagueRow.owner_id,
+      subscriptionStatus: leagueRow.subscription_status || "active",
+      inputId: leagueRow.sleeper_league_id,
+      loading: false,
+      error: null,
+    }));
+    setSelectedWeek(leagueRow.current_week);
+    setForm((f) => ({ ...f, week: leagueRow.current_week }));
+  }, []);
+
+  // Switches which of the account's leagues is active. Clears every league-scoped piece of
+  // state up front so a slower-loading new league can never show under the old league's label,
+  // and never mixes with it — weekCache included, since it used to be keyed by week number
+  // alone and could otherwise leak one league's matchup data into another's identical week.
+  const switchLeague = useCallback(async (leagueDbId) => {
+    if (!leagueDbId || leagueDbId === league.dbId) {
+      setLeaguePickerOpen(false);
+      return;
+    }
+    const leagueRow = myLeagues.find((l) => l.id === leagueDbId);
+    if (!leagueRow) return;
+    setLeaguePickerOpen(false);
+    setBets([]);
+    setPoolEntries([]);
+    setPoolPicks([]);
+    weekCacheRef.current = {};
+    setWeekCache({});
+    // Fetch members BEFORE flipping league.dbId — dbIdByOwnerId/ownerIdByDbId (and the bets
+    // fetch effect that depends on league.dbId) derive from `members`, so setting dbId first
+    // would fire that effect against a still-empty owner-id map and map every bet's
+    // creator/opponent to null until the next unrelated re-render happened to fix it.
+    let memberRows = [];
+    try {
+      memberRows = await membersApi.fetchMembers(leagueDbId);
+    } catch {
+      // best-effort — the members realtime effect will retry once league.dbId is set below
+    }
+    setMembers(memberRows);
+    applyLeagueRow(leagueRow);
+    updateLastActiveLeague(leagueDbId).catch(() => {});
+  }, [league.dbId, myLeagues, membersApi, applyLeagueRow]);
+
+  // ---------- bootstrap: which league(s) does this account already belong to? ----------
   useEffect(() => {
     let cancelled = false;
-    membersApi.findMyMembership(session.user.id)
-      .then(async (row) => {
+    membersApi.findMyMemberships(session.user.id)
+      .then(async (rows) => {
         if (cancelled) return;
-        if (!row) {
+        if (!rows.length) {
           setBootstrapping(false);
           return;
         }
-        const leagueRow = row.leagues;
-        const memberRows = await membersApi.fetchMembers(leagueRow.id);
+        const leagueRows = rows.map((r) => r.leagues);
+        setMyLeagues(leagueRows);
+        const lastActiveId = session.user.user_metadata?.last_active_league_id;
+        const activeRow = leagueRows.find((l) => l.id === lastActiveId) || leagueRows[0];
+        // Fetch members before setting league.dbId — see the matching comment in switchLeague.
+        const memberRows = await membersApi.fetchMembers(activeRow.id);
         if (cancelled) return;
         setMembers(memberRows);
-        setLeague((s) => ({
-          ...s,
-          linked: true,
-          dbId: leagueRow.id,
-          leagueId: leagueRow.sleeper_league_id,
-          leagueName: leagueRow.name,
-          week: leagueRow.current_week,
-          season: leagueRow.season,
-          nflSeasonType: leagueRow.nfl_season_type,
-          scoringField: leagueRow.scoring_field,
-          scoringLabel: leagueRow.scoring_label,
-          projectionSeason: leagueRow.projection_season,
-          poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
-          ownerId: leagueRow.owner_id,
-          subscriptionStatus: leagueRow.subscription_status || "active",
-          inputId: leagueRow.sleeper_league_id,
-        }));
-        setSelectedWeek(leagueRow.current_week);
-        setForm((f) => ({ ...f, week: leagueRow.current_week }));
+        applyLeagueRow(activeRow);
         setBootstrapping(false);
       })
       .catch(() => setBootstrapping(false));
@@ -1258,7 +1309,10 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     };
   }, []);
 
-  const connectLeague = useCallback(async (leagueId) => {
+  // Also used to add a *second* (or third...) league to an already-linked account — the only
+  // difference from first-time linking is that here there's existing league-scoped state to
+  // clear first, so the new league can't show up blended with the old one even momentarily.
+  const connectLeague = useCallback(async (leagueId, { isAdditional = false } = {}) => {
     if (demo || !leagueId.trim()) return;
     setLeague((s) => ({ ...s, loading: true, error: null }));
     try {
@@ -1273,6 +1327,16 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         current_week: data.week,
       });
       const memberRows = await membersApi.syncMembersFromSleeper(leagueRow.id, data.members);
+      // Only now that the new league's own data is in hand do we touch any existing league's
+      // state — clearing earlier (before knowing this would succeed) would leave the current
+      // league's members/bets wiped with nothing to restore them if the connect attempt failed.
+      if (isAdditional) {
+        setBets([]);
+        setPoolEntries([]);
+        setPoolPicks([]);
+        weekCacheRef.current = {};
+        setWeekCache({});
+      }
       setMembers(memberRows);
       setLeague((s) => ({
         ...s,
@@ -1286,20 +1350,33 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         nflSeasonType: data.nflSeasonType,
         scoringField: data.scoringField,
         scoringLabel: data.scoringLabel,
+        poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
         ownerId: leagueRow.owner_id,
         subscriptionStatus: leagueRow.subscription_status || "active",
         loading: false,
         error: null,
         inputId: leagueId.trim(),
       }));
+      setMyLeagues((prev) => (
+        prev.some((l) => l.id === leagueRow.id) ? prev : [...prev, leagueRow]
+      ));
       setSelectedWeek(data.week);
       setForm((f) => ({ ...f, week: data.week }));
+      updateLastActiveLeague(leagueRow.id).catch(() => {});
+      setAddingLeague(false);
+      setAddLeagueId("");
+      setAddLeagueError(null);
     } catch {
-      setLeague((s) => ({
-        ...s,
-        loading: false,
-        error: "Couldn't load that league. Double-check the Sleeper league ID.",
-      }));
+      if (isAdditional) {
+        setAddLeagueError("Couldn't load that league. Double-check the Sleeper league ID.");
+        setLeague((s) => ({ ...s, loading: false, error: null }));
+      } else {
+        setLeague((s) => ({
+          ...s,
+          loading: false,
+          error: "Couldn't load that league. Double-check the Sleeper league ID.",
+        }));
+      }
     }
   }, [fetchLeagueData]);
 
@@ -1740,7 +1817,11 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     if (demo) return;
     weekCacheRef.current = {};
     setWeekCache({});
-  }, [demo, league.scoringField, league.season, league.projectionSeason]);
+    // league.dbId included so switching leagues always clears week data even when two leagues
+    // share the same season/scoring (switchLeague already clears it directly too — this is a
+    // defense-in-depth backstop, not the only thing preventing one league's week data from
+    // showing under another's label).
+  }, [demo, league.dbId, league.scoringField, league.season, league.projectionSeason]);
 
   useEffect(() => {
     if (!leagueReady || !league.leagueId) return;
@@ -2921,7 +3002,15 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       )}
 
       {league.linked && !viewer && (
-        <ClaimManagerScreen leagueName={league.leagueName} members={members} onClaim={handleClaim} onSignOut={disconnectLeague} />
+        <ClaimManagerScreen
+          leagueName={league.leagueName}
+          members={members}
+          onClaim={handleClaim}
+          onSignOut={disconnectLeague}
+          onBack={myLeagues.length > 1
+            ? () => switchLeague(myLeagues.find((l) => l.id !== league.dbId)?.id)
+            : null}
+        />
       )}
 
       {leagueReady && (
@@ -2941,12 +3030,92 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {!demo && (
+              <div className="sb-league-picker">
+                <button
+                  type="button"
+                  className="sb-viewer-select sb-league-picker-btn"
+                  onClick={() => setLeaguePickerOpen((o) => !o)}
+                >
+                  {league.leagueName} <ChevronDown size={12} />
+                </button>
+                {leaguePickerOpen && (
+                  <div className="sb-league-picker-menu">
+                    {myLeagues.map((l) => (
+                      <button
+                        type="button"
+                        key={l.id}
+                        className={`sb-league-picker-item${l.id === league.dbId ? " active" : ""}`}
+                        onClick={() => switchLeague(l.id)}
+                      >
+                        {l.name}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="sb-league-picker-item sb-league-picker-add"
+                      onClick={() => { setLeaguePickerOpen(false); setAddingLeague(true); }}
+                    >
+                      <Plus size={12} /> Add another league
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <Users size={14} color="#a9c4b6" />
             <span className="sb-marquee-sub" style={{ color: "#a9c4b6" }}>viewing as</span>
             <span className="sb-viewer-select">{nameOf(viewer)}</span>
           </div>
         </div>
       </div>
+
+      {addingLeague && (
+        <div className="sb-setup" style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.5)" }}>
+          <div className="sb-setup-card">
+            <h2>Add Another League</h2>
+            <p>
+              Connect another Sleeper league to this account — your existing league and its bets
+              stay exactly as they are.
+            </p>
+            <div className="sb-field" style={{ color: "var(--paper)" }}>
+              <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
+              <input
+                type="text"
+                placeholder="e.g. 987654321012345678"
+                value={addLeagueId}
+                onChange={(e) => { setAddLeagueId(e.target.value); setAddLeagueError(null); }}
+                style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
+              />
+            </div>
+            <div className="sb-form-actions">
+              <button
+                className="sb-btn sb-btn-submit"
+                onClick={async () => {
+                  setAddLeagueLoading(true);
+                  await connectLeague(addLeagueId, { isAdditional: true });
+                  setAddLeagueLoading(false);
+                }}
+                disabled={addLeagueLoading || !addLeagueId.trim()}
+              >
+                <Link2 size={12} /> {addLeagueLoading ? "Connecting…" : "Connect league"}
+              </button>
+              <button
+                type="button"
+                className="sb-btn sb-btn-cancel"
+                style={{ color: "#a9c4b6", borderColor: "var(--line)" }}
+                onClick={() => { setAddingLeague(false); setAddLeagueId(""); setAddLeagueError(null); }}
+              >
+                Cancel
+              </button>
+            </div>
+            {addLeagueError && (
+              <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
+                <AlertTriangle size={12} /> {addLeagueError}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="sb-tabs">
         <button className={`sb-tab ${tab === "board" ? "active" : ""}`} onClick={() => setTab("board")}>

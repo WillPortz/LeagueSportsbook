@@ -46,18 +46,18 @@ export async function fetchMembers(leagueId) {
   return data.map(dbRowToMember);
 }
 
-// Finds the league (if any) this account has already claimed a manager slot in,
-// so the app can skip straight past "Link Your League" on repeat visits.
-// Assumes one league per account for now — multi-league support is schema-ready
-// (see the partial unique index in supabase/schema.sql) but not built into the UI yet.
-export async function findMyMembership(userId) {
+// Finds every league (if any) this account has already claimed a manager slot in, so the app
+// can skip straight past "Link Your League" on repeat visits and offer a switcher when there's
+// more than one. The partial unique index in supabase/schema.sql (league_id, user_id) only
+// stops claiming two slots in the *same* league — nothing stops one account from having claimed
+// rows across many leagues, so this can safely return more than one row.
+export async function findMyMemberships(userId) {
   const { data, error } = await supabase
     .from("members")
     .select("*, leagues(*)")
-    .eq("user_id", userId)
-    .limit(1);
+    .eq("user_id", userId);
   if (error) throw error;
-  return data?.[0] || null;
+  return data || [];
 }
 
 export async function claimMember(memberDbId, userId) {
