@@ -94,6 +94,14 @@ function payoutFromOdds(stake, odds) {
   return Math.round(stake * 100 / Math.abs(odds));
 }
 
+// Converts a "win $ratio for every $1 staked" ratio (1 = even money/1:1, 2 = 2:1, 0.5 = 1:2, ...)
+// into the equivalent American odds, so custom spread payouts reuse the same odds/payout
+// machinery (formatOdds, payoutFromOdds) as every other market in the app.
+function oddsFromRatio(ratio) {
+  const r = Number(ratio) > 0 ? Number(ratio) : 1;
+  return r >= 1 ? Math.round(r * 100) : -Math.round(100 / r);
+}
+
 function winProbFromSpread(spread) {
   return 1 / (1 + Math.exp(-spread / 7));
 }
@@ -1142,7 +1150,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   // ---------- Create Side Bet builder ----------
   const [builderOpen, setBuilderOpen] = useState(false);
   const [builderCategory, setBuilderCategory] = useState(null); // 'matchup' | 'total' | 'prop' | 'battle' | null
-  const [matchupBuilder, setMatchupBuilder] = useState({ opponent: "", format: "moneyline", spreadLine: "" });
+  const [matchupBuilder, setMatchupBuilder] = useState({ opponent: "", format: "moneyline", spreadLine: "", spreadRatio: "" });
   const [totalBuilder, setTotalBuilder] = useState({ subjectId: "", line: "" });
   const [propBuilder, setPropBuilder] = useState({ playerId: "", line: "" });
 
@@ -2217,6 +2225,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     const favoriteIsMe = myProj >= oppProj;
     const defaultSpread = Math.round(Math.abs(myProj - oppProj) * 2) / 2 || 0.5;
     const spreadLine = Number(matchupBuilder.spreadLine) || defaultSpread;
+    const spreadRatio = Number(matchupBuilder.spreadRatio) > 0 ? Number(matchupBuilder.spreadRatio) : 1;
+    const spreadOdds = oddsFromRatio(spreadRatio);
 
     let offering = null;
     if (oppMember) {
@@ -2245,8 +2255,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           counterpartyId: oppMember.id,
           line: spreadLine,
           sides: [
-            { key: "fav", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "over", odds: -110 },
-            { key: "dog", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "under", odds: -110 },
+            { key: "fav", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "over", odds: spreadOdds },
+            { key: "dog", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "under", odds: spreadOdds },
           ],
         };
       }
@@ -2266,18 +2276,35 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         </div>
         {oppMember && (
           <>
-            <p className="sb-note" style={{ color: "#6b6144" }}>
-              Projected: {nameOf(viewer)} {formatProj(myProj)} · {oppMember.name} {formatProj(oppProj)} · {nameOf(viewer)} win probability {Math.round(probMe * 100)}%
-            </p>
+            {matchupBuilder.format === "moneyline" ? (
+              <p className="sb-note" style={{ color: "#6b6144" }}>
+                Projected: {nameOf(viewer)} {formatProj(myProj)} · {oppMember.name} {formatProj(oppProj)} · {nameOf(viewer)} win probability {Math.round(probMe * 100)}%
+              </p>
+            ) : (
+              <p className="sb-note" style={{ color: "#6b6144" }}>
+                Projected: {nameOf(viewer)} {formatProj(myProj)} · {oppMember.name} {formatProj(oppProj)} · projected spread{" "}
+                {nameOf(favoriteIsMe ? viewer : oppMember.id)} -{formatProj(defaultSpread)}
+              </p>
+            )}
             <div className="sb-format-toggle">
               <button type="button" className={matchupBuilder.format === "moneyline" ? "active" : ""} onClick={() => setMatchupBuilder((f) => ({ ...f, format: "moneyline" }))}>Moneyline</button>
               <button type="button" className={matchupBuilder.format === "spread" ? "active" : ""} onClick={() => setMatchupBuilder((f) => ({ ...f, format: "spread" }))}>Custom Spread</button>
             </div>
             {matchupBuilder.format === "spread" && (
-              <div className="sb-field" style={{ maxWidth: 140 }}>
-                <label>Spread (pts)</label>
-                <input type="number" min="0.5" step="0.5" value={matchupBuilder.spreadLine || defaultSpread}
-                  onChange={(e) => setMatchupBuilder((f) => ({ ...f, spreadLine: e.target.value }))} />
+              <div className="sb-form-row">
+                <div className="sb-field" style={{ maxWidth: 140 }}>
+                  <label>Spread (pts)</label>
+                  <input type="number" min="0.5" step="0.5" value={matchupBuilder.spreadLine || defaultSpread}
+                    onChange={(e) => setMatchupBuilder((f) => ({ ...f, spreadLine: e.target.value }))} />
+                </div>
+                <div className="sb-field" style={{ maxWidth: 140 }}>
+                  <label>Payout ratio</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                    <input type="number" min="0.1" step="0.1" value={matchupBuilder.spreadRatio || spreadRatio}
+                      onChange={(e) => setMatchupBuilder((f) => ({ ...f, spreadRatio: e.target.value }))} />
+                    <span style={{ color: "#6b6144" }}>: 1 ({formatOdds(spreadOdds)})</span>
+                  </div>
+                </div>
               </div>
             )}
             {offering && renderMarketRow(offering)}
