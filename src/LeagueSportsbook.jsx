@@ -1972,7 +1972,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
             >
               <span className="dk-odds-label">{side.label}</span>
               {side.sublabel && <span className="dk-odds-sublabel">{side.sublabel}</span>}
-              {side.pick && <span className="dk-odds-sublabel">{side.pick === "over" ? "Over" : "Under"}</span>}
+              {side.pick && <span className="dk-odds-sublabel">{(side.displaySide || side.pick) === "over" ? "Over" : "Under"}</span>}
               <span className="dk-odds-value">{formatOdds(side.odds)}</span>
             </button>
           );
@@ -2120,7 +2120,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       bet.matchupPeerId = offering.underdogId;
       bet.line = offering.line;
       bet.creatorSide = side.pick;
-      title = `${side.label} covers @ ${formatOdds(side.odds)} (Week ${offering.week})`;
+      const coversVerb = side.covers === false ? "doesn't cover" : "covers";
+      title = `${side.label} ${coversVerb} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "player_ou") {
       bet.playerId = offering.playerId;
@@ -2254,9 +2255,16 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           favoriteId, underdogId,
           counterpartyId: oppMember.id,
           line: spreadLine,
+          // Four sides, two per team: each team gets its own Over (covers) and Under (doesn't
+          // cover) button. "Fav Over" and "Dog Under" are the same real outcome (favorite
+          // covers) and "Fav Under" / "Dog Over" are the other (underdog covers) — pick still
+          // carries the same over/under value autoGrade already expects (over ⟺ favorite
+          // covers), while displaySide/covers control what each button actually shows.
           sides: [
-            { key: "fav", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "over", odds: spreadOdds },
-            { key: "dog", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "under", odds: spreadOdds },
+            { key: "fav-over", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "over", displaySide: "over", covers: true, odds: spreadOdds },
+            { key: "fav-under", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "under", displaySide: "under", covers: false, odds: spreadOdds },
+            { key: "dog-over", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "under", displaySide: "over", covers: true, odds: spreadOdds },
+            { key: "dog-under", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "over", displaySide: "under", covers: false, odds: spreadOdds },
           ],
         };
       }
