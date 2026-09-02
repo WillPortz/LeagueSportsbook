@@ -2197,12 +2197,11 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       title = `${nameOf(side.memberId)} lineup beats ${nameOf(bet.matchupPeerId)} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "lineup_spread") {
-      bet.subjectId = offering.favoriteId;
-      bet.matchupPeerId = offering.underdogId;
-      bet.line = offering.line;
-      bet.creatorSide = side.pick;
-      const coversVerb = side.covers === false ? "doesn't cover" : "covers";
-      title = `${side.label} ${coversVerb} @ ${formatOdds(side.odds)} (Week ${offering.week})`;
+      bet.subjectId = side.subjectId;
+      bet.matchupPeerId = side.peerId;
+      bet.line = side.signedLine;
+      bet.creatorSide = "over";
+      title = `${side.label} covers @ ${formatOdds(side.odds)} (Week ${offering.week})`;
       bet.title = title;
     } else if (offering.kind === "player_ou") {
       bet.playerId = offering.playerId;
@@ -2326,26 +2325,25 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           ],
         };
       } else {
-        const favoriteId = favoriteIsMe ? viewer : oppMember.id;
-        const underdogId = favoriteIsMe ? oppMember.id : viewer;
+        // Alternate-spread style: either team can be picked laying points (-X) or getting
+        // points (+X), regardless of which one Sleeper's projections actually favor — a friend
+        // can bet "the underdog by -2" if they disagree with the projection. Each side just
+        // asks "does this team's own margin beat this signed threshold", which is exactly what
+        // autoGrade's existing lineup_spread math already computes (subject's pts − peer's pts
+        // vs. line) — a negative line for the "+X" buttons is all that's needed, no grading
+        // changes required. creatorSide is always "over" since every button is phrased as a
+        // direct claim ("this team covers this number"), never its negation.
         offering = {
           id: `builder-spread-${activeWeek}-${viewer}-${oppMember.id}`,
           kind: "lineup_spread", type: "matchup", week: activeWeek,
           title: `${nameOf(viewer)} vs ${oppMember.name} — spread`,
           subtitle: `Week ${activeWeek} · proj ${formatProj(myProj)} vs ${formatProj(oppProj)}`,
-          favoriteId, underdogId,
           counterpartyId: oppMember.id,
-          line: spreadLine,
-          // Four sides, two per team: each team gets its own Over (covers) and Under (doesn't
-          // cover) button. "Fav Over" and "Dog Under" are the same real outcome (favorite
-          // covers) and "Fav Under" / "Dog Over" are the other (underdog covers) — pick still
-          // carries the same over/under value autoGrade already expects (over ⟺ favorite
-          // covers), while displaySide/covers control what each button actually shows.
           sides: [
-            { key: "fav-over", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "over", displaySide: "over", covers: true, odds: spreadOdds },
-            { key: "fav-under", memberId: favoriteId, label: `${nameOf(favoriteId)} -${formatProj(spreadLine)}`, pick: "under", displaySide: "under", covers: false, odds: spreadOdds },
-            { key: "dog-over", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "under", displaySide: "over", covers: true, odds: spreadOdds },
-            { key: "dog-under", memberId: underdogId, label: `${nameOf(underdogId)} +${formatProj(spreadLine)}`, pick: "over", displaySide: "under", covers: false, odds: spreadOdds },
+            { key: "me-minus", memberId: viewer, label: `${nameOf(viewer)} -${formatProj(spreadLine)}`, subjectId: viewer, peerId: oppMember.id, signedLine: spreadLine, odds: spreadOdds },
+            { key: "me-plus", memberId: viewer, label: `${nameOf(viewer)} +${formatProj(spreadLine)}`, subjectId: viewer, peerId: oppMember.id, signedLine: -spreadLine, odds: spreadOdds },
+            { key: "opp-minus", memberId: oppMember.id, label: `${oppMember.name} -${formatProj(spreadLine)}`, subjectId: oppMember.id, peerId: viewer, signedLine: spreadLine, odds: spreadOdds },
+            { key: "opp-plus", memberId: oppMember.id, label: `${oppMember.name} +${formatProj(spreadLine)}`, subjectId: oppMember.id, peerId: viewer, signedLine: -spreadLine, odds: spreadOdds },
           ],
         };
       }
