@@ -4,7 +4,8 @@
 
 import {
   DEMO_USER_ID, DEMO_LEAGUE_DB_ID, DEMO_SLEEPER_LEAGUE_ID, DEMO_CURRENT_WEEK, DEMO_SEASON,
-  DEMO_MEMBERS, DEMO_SEED_BETS, DEMO_SEED_POOL_ENTRIES, DEMO_SEED_POOL_PICKS, otherManagerId,
+  DEMO_MEMBERS, DEMO_SEED_BETS, DEMO_SEED_POOL_ENTRIES, DEMO_SEED_POOL_PICKS,
+  DEMO_SEED_SURVIVOR_ENTRIES, DEMO_SEED_SURVIVOR_PICKS, otherManagerId,
 } from "./demoData.js";
 
 let demoLeagueRow = {
@@ -18,6 +19,7 @@ let demoLeagueRow = {
   projection_season: DEMO_SEASON,
   current_week: DEMO_CURRENT_WEEK,
   pool_entry_fee: 5,
+  survivor_entry_fee: 5,
   created_by: DEMO_USER_ID,
   owner_id: DEMO_USER_ID,
   subscription_status: "active",
@@ -176,5 +178,60 @@ export const demoPoolApi = {
     const updated = { ...old, paid };
     poolEntryRows = poolEntryRows.map((e) => (e.id === entryId ? updated : e));
     poolEntryBus.notify({ eventType: "UPDATE", new: updated, old });
+  },
+};
+
+let survivorEntryRows = DEMO_SEED_SURVIVOR_ENTRIES.map((e) => ({ ...e }));
+let survivorPickRows = DEMO_SEED_SURVIVOR_PICKS.map((p) => ({ ...p }));
+const survivorEntryBus = makePubSub();
+const survivorPickBus = makePubSub();
+let demoSurvivorSeq = 4000;
+
+export const demoSurvivorApi = {
+  dbRowToEntry(row) {
+    return row;
+  },
+  dbRowToPick(row) {
+    return row;
+  },
+  async fetchEntries() {
+    return survivorEntryRows.map((e) => ({ ...e }));
+  },
+  async fetchPicks() {
+    return survivorPickRows.map((p) => ({ ...p }));
+  },
+  subscribeToEntries(_leagueId, onChange) {
+    return survivorEntryBus.subscribe(onChange);
+  },
+  subscribeToPicks(_leagueId, onChange) {
+    return survivorPickBus.subscribe(onChange);
+  },
+  async submitPick(_leagueId, week, memberDbId, pickMemberDbId) {
+    let entry = survivorEntryRows.find((e) => e.memberId === memberDbId);
+    if (!entry) {
+      demoSurvivorSeq += 1;
+      entry = { id: `demo-survivor-entry-${demoSurvivorSeq}`, memberId: memberDbId, paid: false };
+      survivorEntryRows = [...survivorEntryRows, entry];
+      survivorEntryBus.notify({ eventType: "INSERT", new: entry, old: null });
+    }
+
+    const old = survivorPickRows.find((p) => p.week === week && p.memberId === memberDbId);
+    if (old) {
+      const updated = { ...old, pickMemberId: pickMemberDbId };
+      survivorPickRows = survivorPickRows.map((p) => (p.id === old.id ? updated : p));
+      survivorPickBus.notify({ eventType: "UPDATE", new: updated, old });
+    } else {
+      demoSurvivorSeq += 1;
+      const row = { id: `demo-survivor-pick-${demoSurvivorSeq}`, week, memberId: memberDbId, pickMemberId: pickMemberDbId };
+      survivorPickRows = [...survivorPickRows, row];
+      survivorPickBus.notify({ eventType: "INSERT", new: row, old: null });
+    }
+  },
+  async setPaid(entryId, paid) {
+    const old = survivorEntryRows.find((e) => e.id === entryId);
+    if (!old) return;
+    const updated = { ...old, paid };
+    survivorEntryRows = survivorEntryRows.map((e) => (e.id === entryId ? updated : e));
+    survivorEntryBus.notify({ eventType: "UPDATE", new: updated, old });
   },
 };

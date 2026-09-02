@@ -248,3 +248,46 @@ let poolPickSeq = 0;
 
 export const DEMO_SEED_POOL_ENTRIES = poolEntries;
 export const DEMO_SEED_POOL_PICKS = poolPicks;
+
+// ---------- seed survivor pool — derive week 8's real winners so picks land genuinely mixed ----------
+const prevWeekByMatchup = {};
+members.forEach((m) => {
+  const row = weekMatchupsPrev[m.rosterId];
+  if (!row) return;
+  if (!prevWeekByMatchup[row.matchup_id]) prevWeekByMatchup[row.matchup_id] = [];
+  prevWeekByMatchup[row.matchup_id].push(m);
+});
+const prevWeekWinners = new Set();
+Object.values(prevWeekByMatchup).forEach((group) => {
+  if (group.length !== 2) return;
+  const [a, b] = group;
+  const ptsA = weekMatchupsPrev[a.rosterId].points;
+  const ptsB = weekMatchupsPrev[b.rosterId].points;
+  prevWeekWinners.add(ptsA > ptsB ? a.id : b.id);
+});
+
+// Hand-picked rather than random so the demo reliably shows a mixed outcome (some survive, some
+// don't) instead of leaving it to chance against prevWeekWinners — half pick an actual week-8
+// winner (jake/mike/sam survive), half don't (alex/nick/tyler are out).
+const SURVIVOR_SEED_PICKS = {
+  jake: "alex", mike: "sam", sam: "chris",
+  alex: "nick", nick: "tyler", tyler: "jake",
+};
+
+const survivorEntries = [];
+const survivorPicks = [];
+let survivorPickSeq = 0;
+["jake", "mike", "sam", "alex", "nick", "tyler"].forEach((mid, idx) => {
+  survivorEntries.push({ id: `demo-survivor-entry-${mid}`, memberId: mid, paid: idx < 5 });
+  survivorPickSeq += 1;
+  survivorPicks.push({
+    id: `demo-survivor-pick-${survivorPickSeq}`,
+    week: PREV_WEEK,
+    memberId: mid,
+    pickMemberId: SURVIVOR_SEED_PICKS[mid],
+  });
+});
+
+export const DEMO_SEED_SURVIVOR_ENTRIES = survivorEntries;
+export const DEMO_SEED_SURVIVOR_PICKS = survivorPicks;
+export const DEMO_PREV_WEEK_WINNERS = prevWeekWinners; // exported for sanity/debugging only

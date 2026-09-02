@@ -16,6 +16,7 @@ create table if not exists leagues (
   current_week int not null default 1,
   ticket_seq int not null default 1000,   -- next ticket number = ticket_seq + 1 (mirrors old TICKET_SEQ=1001)
   pool_entry_fee numeric not null default 5,
+  survivor_entry_fee numeric not null default 5,
   -- created_by: immutable record of who originally connected this league. owner_id: the
   -- current commissioner/billing owner — starts the same as created_by but is meant to be
   -- reassignable later (transfer-ownership UI doesn't exist yet, but the column does).
@@ -121,6 +122,33 @@ create table if not exists pool_picks (
 
 create index if not exists pool_entries_league_week_idx on pool_entries (league_id, week);
 create index if not exists pool_picks_league_week_idx   on pool_picks (league_id, week);
+
+-- ============ survivor pool ============
+-- One pick a week, whole season: pick a manager you think wins their real Sleeper matchup.
+-- Wrong once and you're out for good — elimination status is computed client-side from these
+-- picks plus the same actual-results data the bets/board grading already uses, not stored here.
+create table if not exists survivor_entries (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references leagues(id) on delete cascade,
+  member_id uuid not null references members(id),
+  paid boolean not null default false,
+  created_at timestamptz not null default now(),
+  unique (league_id, member_id)
+);
+
+create table if not exists survivor_picks (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references leagues(id) on delete cascade,
+  week int not null,
+  member_id uuid not null references members(id),       -- whose pick this is
+  pick_member_id uuid not null references members(id),  -- who they picked to win
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (league_id, week, member_id),          -- one pick per person per week
+  unique (league_id, member_id, pick_member_id) -- can't reuse the same manager across the season
+);
+
+create index if not exists survivor_picks_league_week_idx on survivor_picks (league_id, week);
 
 -- ============ atomic per-league ticket numbering (replaces client ticketSeq state) ============
 create or replace function assign_bet_ticket() returns trigger as $$
@@ -242,8 +270,10 @@ create trigger bets_transition_guard
 alter table leagues      enable row level security;
 alter table members      enable row level security;
 alter table bets         enable row level security;
-alter table pool_entries enable row level security;
-alter table pool_picks   enable row level security;
+alter table pool_entries     enable row level security;
+alter table pool_picks       enable row level security;
+alter table survivor_entries enable row level security;
+alter table survivor_picks   enable row level security;
 
 drop policy if exists leagues_select on leagues;
 drop policy if exists leagues_insert on leagues;
@@ -319,5 +349,33 @@ create policy pool_picks_update on pool_picks for update using (
   exists (select 1 from members m where m.id = pool_picks.member_id and m.user_id = auth.uid())
 );
 
+drop policy if exists survivor_entries_select on survivor_entries;
+drop policy if exists survivor_entries_insert on survivor_entries;
+drop policy if exists survivor_entries_update on survivor_entries;
+drop policy if exists survivor_picks_select   on survivor_picks;
+drop policy if exists survivor_picks_insert   on survivor_picks;
+drop policy if exists survivor_picks_update   on survivor_picks;
+
+create policy survivor_entries_select on survivor_entries for select using (
+  exists (select 1 from members m where m.league_id = survivor_entries.league_id and m.user_id = auth.uid())
+);
+create policy survivor_entries_insert on survivor_entries for insert with check (
+  exists (select 1 from members m where m.id = survivor_entries.member_id and m.user_id = auth.uid() and m.league_id = survivor_entries.league_id)
+);
+create policy survivor_entries_update on survivor_entries for update using (
+  exists (select 1 from members m where m.id = survivor_entries.member_id and m.user_id = auth.uid())
+);
+
+create policy survivor_picks_select on survivor_picks for select using (
+  exists (select 1 from members m where m.league_id = survivor_picks.league_id and m.user_id = auth.uid())
+);
+create policy survivor_picks_insert on survivor_picks for insert with check (
+  exists (select 1 from members m  where m.id = survivor_picks.member_id      and m.user_id = auth.uid() and m.league_id = survivor_picks.league_id)
+  and exists (select 1 from members m2 where m2.id = survivor_picks.pick_member_id and m2.league_id = survivor_picks.league_id)
+);
+create policy survivor_picks_update on survivor_picks for update using (
+  exists (select 1 from members m where m.id = survivor_picks.member_id and m.user_id = auth.uid())
+);
+
 -- ============ enable realtime ============
-alter publication supabase_realtime add table bets, members, pool_entries, pool_picks;
+alter publication supabase_realtime add table bets, members, pool_entries, pool_picks, survivor_entries, survivor_picks;

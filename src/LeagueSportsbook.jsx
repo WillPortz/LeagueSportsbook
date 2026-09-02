@@ -1,13 +1,14 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Check, X, Lock, Trophy, Plus, ChevronLeft, ChevronRight, ChevronDown, Users, User, ScrollText,
-  Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords, Coins,
+  Zap, RefreshCw, Link2, AlertTriangle, CalendarDays, TrendingUp, Swords, Coins, Skull,
 } from "lucide-react";
 import * as realLeaguesApi from "./lib/leaguesApi.js";
 import * as realMembersApi from "./lib/membersApi.js";
 import * as realBetsApi from "./lib/betsApi.js";
 import * as realPoolApi from "./lib/poolApi.js";
-import { demoLeaguesApi, demoMembersApi, demoBetsApi, demoPoolApi } from "./lib/demoApi.js";
+import * as realSurvivorApi from "./lib/survivorApi.js";
+import { demoLeaguesApi, demoMembersApi, demoBetsApi, demoPoolApi, demoSurvivorApi } from "./lib/demoApi.js";
 import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoData.js";
 import { signOut, updateLastActiveLeague } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
@@ -456,7 +457,7 @@ function rankSuffix(n) {
   }
 }
 
-function generateSeasonBoardOfferings(members, playoffTeams) {
+function generateSeasonBoardOfferings(members, playoffTeams, weekCache = {}, currentWeek = 1) {
   if (members.length < 2) return [];
 
   const offerings = [];
@@ -549,6 +550,75 @@ function generateSeasonBoardOfferings(members, playoffTeams) {
     });
   });
 
+  const avgPoints = members.map((m) => ({ id: m.id, name: m.name, score: m.gamesPlayed ? m.seasonPts / m.gamesPlayed : 0 }));
+  rankFieldOdds(avgPoints).forEach((r) => {
+    offerings.push({
+      id: `season-avg-points-${r.id}`,
+      kind: "season_avg_points",
+      type: "season",
+      title: `${r.name} — Manager of the Year`,
+      subtitle: `Points per game so far: ${formatProj(r.score)}`,
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} has the best points-per-game average`, odds: americanOdds(r.prob) }],
+    });
+  });
+
+  // Best/worst single week so far — reuses weeks already sitting in weekCache, no new fetching.
+  const weekNums = Object.keys(weekCache).map(Number).filter((w) => w <= currentWeek);
+
+  const bestWeekScores = members.map((m) => {
+    let best = null;
+    weekNums.forEach((w) => {
+      const weekData = weekCache[w]?.matchups;
+      if (!weekData) return;
+      const pts = lineupFantasyPts(weekData, m.rosterId, m.starters);
+      if (pts == null) return;
+      if (best == null || pts > best) best = pts;
+    });
+    return { id: m.id, name: m.name, score: best ?? 0 };
+  });
+  rankFieldOdds(bestWeekScores).forEach((r) => {
+    offerings.push({
+      id: `season-best-week-${r.id}`,
+      kind: "season_best_week",
+      type: "season",
+      title: `${r.name} — Highest Single-Week Score`,
+      subtitle: `Best week so far: ${formatProj(r.score)}`,
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} has the highest single-week score`, odds: americanOdds(r.prob) }],
+    });
+  });
+
+  const worstWeekScores = members.map((m) => {
+    let worst = null;
+    weekNums.forEach((w) => {
+      const weekData = weekCache[w]?.matchups;
+      const projections = weekCache[w]?.projections;
+      if (!weekData || !projections) return;
+      const actual = lineupFantasyPts(weekData, m.rosterId, m.starters);
+      const proj = sumLineupProjections(m, projections);
+      if (actual == null || proj == null) return;
+      const diff = actual - proj;
+      if (worst == null || diff < worst) worst = diff;
+    });
+    return { id: m.id, name: m.name, score: worst ?? 0 };
+  });
+  rankFieldOdds(worstWeekScores.map((r) => ({ ...r, score: -r.score }))).forEach((r) => {
+    const missBy = -r.score;
+    offerings.push({
+      id: `season-worst-week-${r.id}`,
+      kind: "season_worst_week",
+      type: "season",
+      title: `${r.name} — Biggest Single-Week Bust`,
+      subtitle: `Worst miss so far: ${formatProj(missBy)} vs projection`,
+      subjectId: r.id,
+      fantasyTeamIds: [r.id],
+      sides: [{ key: "pick", label: `${r.name} has the biggest single-week bust`, odds: americanOdds(r.prob) }],
+    });
+  });
+
   return offerings;
 }
 
@@ -568,7 +638,9 @@ function getPlayerPts(weekData, members, playerId) {
   return null;
 }
 
-// ---------- Weekly League Pool: the nine questions, graded from actual (not projected) results ----------
+// ---------- Weekly League Pool: a bank of questions, graded from actual (not projected) results.
+// Each week shows a random 9-question subset (see pickWeeklyQuestions) so the set varies instead
+// of repeating identically every week — gradePoolWeek still grades the full bank unconditionally.
 const POOL_QUESTIONS = [
   { key: "weekly_high", prompt: "Who will score the most fantasy points this week?" },
   { key: "weekly_low", prompt: "Who will score the fewest fantasy points this week?" },
@@ -576,10 +648,44 @@ const POOL_QUESTIONS = [
   { key: "biggest_blowout", prompt: "Whose matchup will be the biggest blowout?" },
   { key: "closest_matchup", prompt: "Whose matchup will be the closest?" },
   { key: "highest_player", prompt: "Which manager will have the highest-scoring player?" },
+  { key: "lowest_player", prompt: "Which manager will have the lowest-scoring starter?" },
   { key: "most_bench", prompt: "Which manager will get the most points from their bench?" },
   { key: "best_overperform", prompt: "Which manager will beat their projection by the most?" },
+  { key: "worst_overperform", prompt: "Which manager will miss their projection by the most?" },
   { key: "biggest_upset", prompt: "Which manager will pull off the biggest upset?" },
+  { key: "highest_qb", prompt: "Which manager will start the highest-scoring QB?" },
+  { key: "highest_rb", prompt: "Which manager will start the highest-scoring RB?" },
+  { key: "highest_wr", prompt: "Which manager will start the highest-scoring WR?" },
+  { key: "most_consistent", prompt: "Which manager will land closest to their projection?" },
 ];
+
+// Deterministic per (leagueId, week) so every league member sees the identical rotating subset —
+// a client-random shuffle would desync the leaderboard between accounts viewing the same week.
+function mulberry32(seed) {
+  let a = seed;
+  return function rand() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hashSeed(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i += 1) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return h;
+}
+
+function pickWeeklyQuestions(leagueId, week, count = 9) {
+  const rand = mulberry32(hashSeed(`${leagueId}-${week}`));
+  const pool = [...POOL_QUESTIONS];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
+}
 
 function poolLineupActual(weekData, member) {
   return lineupFantasyPts(weekData, member.rosterId, member.starters);
@@ -604,6 +710,14 @@ function poolPickExtreme(entries, dir) {
   return { winners, best };
 }
 
+// Shared by the Pool and Survivor tabs: a week's picks lock once it's in the past, or once any
+// team already shows real points for it (games underway) — the same heuristic used everywhere
+// else in this app for "has this week actually started," since Sleeper doesn't expose kickoff
+// timestamps directly.
+function weekPicksLocked(week, currentWk, weekData) {
+  return week < currentWk || Object.values(weekData).some((row) => Number(row?.points) > 0);
+}
+
 function gradeMatchupWinners(members, weekData) {
   const winners = new Set();
   getWeekPairs(weekData, members).forEach(([a, b]) => {
@@ -613,6 +727,34 @@ function gradeMatchupWinners(members, weekData) {
     winners.add(ptsA > ptsB ? a.id : b.id);
   });
   return { winners };
+}
+
+// Survivor Pool grading — reuses gradeMatchupWinners week by week rather than duplicating the
+// matchup-winner logic. picksByWeek: { [week]: { [memberId]: pickMemberId } }. A member with no
+// pick for a week is left alone (not eliminated) rather than assumed wrong — they just haven't
+// played that week yet (or joined the pool late), same "absence isn't a claim" stance the rest
+// of grading takes.
+function computeSurvivorStatus(members, picksByWeek, currentWk, weekCache) {
+  const status = {};
+  members.forEach((m) => { status[m.id] = { alive: true, eliminatedWeek: null }; });
+  for (let w = 1; w <= currentWk; w += 1) {
+    const weekData = weekCache[w]?.matchups;
+    if (!weekData || !Object.keys(weekData).length) continue;
+    if (!weekPicksLocked(w, currentWk, weekData)) continue; // don't grade a week that hasn't started
+    const { winners } = gradeMatchupWinners(members, weekData);
+    const weekPicks = picksByWeek[w] || {};
+    members.forEach((m) => {
+      const entry = status[m.id];
+      if (!entry.alive) return;
+      const pick = weekPicks[m.id];
+      if (!pick) return;
+      if (!winners.has(pick)) {
+        entry.alive = false;
+        entry.eliminatedWeek = w;
+      }
+    });
+  }
+  return status;
 }
 
 function gradeMatchupMargin(members, weekData, dir) {
@@ -635,15 +777,19 @@ function gradeMatchupMargin(members, weekData, dir) {
   return { winners, best };
 }
 
-function gradeHighestPlayer(members, weekData) {
+// dir=1 picks the highest-scoring player league-wide, dir=-1 the lowest; `players` + `position`
+// narrow it to one position (e.g. "QB") — omit `position` for "any player."
+function gradeExtremePlayer(members, weekData, dir, players = null, position = null) {
+  const matches = (pid) => !position || players?.[pid]?.position === position;
   let best = null;
   members.forEach((m) => {
     const row = weekData[m.rosterId];
     if (!row?.players_points) return;
     (row.players || []).forEach((pid) => {
+      if (!matches(pid)) return;
       const pts = row.players_points[pid];
       if (pts == null) return;
-      if (best == null || pts > best) best = pts;
+      if (best == null || (dir === 1 ? pts > best : pts < best)) best = pts;
     });
   });
   if (best == null) return { winners: new Set(), best: null };
@@ -652,6 +798,7 @@ function gradeHighestPlayer(members, weekData) {
     const row = weekData[m.rosterId];
     if (!row?.players_points) return;
     (row.players || []).forEach((pid) => {
+      if (!matches(pid)) return;
       if (row.players_points[pid] === best) winners.add(m.id);
     });
   });
@@ -676,23 +823,38 @@ function gradeBiggestUpset(members, weekData, projections) {
   return { winners: winnerId ? new Set([winnerId]) : new Set(), best: worstProb };
 }
 
-// Composes all nine graders into { [questionKey]: { winners: Set<memberId>, best } }. Empty
-// weekData (week hasn't started) naturally yields empty winner sets for every question.
-function gradePoolWeek(members, weekData, projections) {
+// Composes every grader in the bank into { [questionKey]: { winners: Set<memberId>, best } },
+// unconditionally — the weekly-subset selection only affects what's shown, not what's graded.
+// Empty weekData (week hasn't started) naturally yields empty winner sets for every question.
+function gradePoolWeek(members, weekData, projections, players = {}) {
   return {
     weekly_high: poolPickExtreme(members.map((m) => ({ id: m.id, score: poolLineupActual(weekData, m) })), 1),
     weekly_low: poolPickExtreme(members.map((m) => ({ id: m.id, score: poolLineupActual(weekData, m) })), -1),
     matchup_winner: gradeMatchupWinners(members, weekData),
     biggest_blowout: gradeMatchupMargin(members, weekData, 1),
     closest_matchup: gradeMatchupMargin(members, weekData, -1),
-    highest_player: gradeHighestPlayer(members, weekData),
+    highest_player: gradeExtremePlayer(members, weekData, 1),
+    lowest_player: gradeExtremePlayer(members, weekData, -1),
     most_bench: poolPickExtreme(members.map((m) => ({ id: m.id, score: poolBenchActual(weekData, m) })), 1),
     best_overperform: poolPickExtreme(members.map((m) => {
       const actual = poolLineupActual(weekData, m);
       const proj = sumLineupProjections(m, projections);
       return { id: m.id, score: actual != null && proj != null ? actual - proj : null };
     }), 1),
+    worst_overperform: poolPickExtreme(members.map((m) => {
+      const actual = poolLineupActual(weekData, m);
+      const proj = sumLineupProjections(m, projections);
+      return { id: m.id, score: actual != null && proj != null ? actual - proj : null };
+    }), -1),
     biggest_upset: gradeBiggestUpset(members, weekData, projections),
+    highest_qb: gradeExtremePlayer(members, weekData, 1, players, "QB"),
+    highest_rb: gradeExtremePlayer(members, weekData, 1, players, "RB"),
+    highest_wr: gradeExtremePlayer(members, weekData, 1, players, "WR"),
+    most_consistent: poolPickExtreme(members.map((m) => {
+      const actual = poolLineupActual(weekData, m);
+      const proj = sumLineupProjections(m, projections);
+      return { id: m.id, score: actual != null && proj != null ? Math.abs(actual - proj) : null };
+    }), -1),
   };
 }
 
@@ -949,6 +1111,9 @@ const SEASON_BOARD_GROUPS = [
   { kind: "season_wins", title: "Most Regular-Season Wins", subtitle: "Best record after week 18" },
   { kind: "season_points", title: "Most Total Points", subtitle: "Highest season point total" },
   { kind: "season_last", title: "Last Place", subtitle: "Bottom of the standings" },
+  { kind: "season_avg_points", title: "Manager of the Year", subtitle: "Best points-per-game average" },
+  { kind: "season_best_week", title: "Highest Single-Week Score", subtitle: "Best week of the season so far" },
+  { kind: "season_worst_week", title: "Biggest Single-Week Bust", subtitle: "Worst miss vs projection so far" },
 ];
 
 function groupBoardOfferingsByKind(offerings, groupDefs) {
@@ -986,6 +1151,9 @@ const BOARD_KIND_LABEL = {
   season_wins: "Most Wins",
   season_points: "Most Points",
   season_last: "Last Place",
+  season_avg_points: "Manager of the Year",
+  season_best_week: "Highest Single-Week Score",
+  season_worst_week: "Biggest Single-Week Bust",
 };
 
 function ticketTypeLabel(bet) {
@@ -996,6 +1164,7 @@ function ticketTypeLabel(bet) {
 // share the same opponent-resolution + bet-object shape in placeBoardBet.
 const SINGLE_PICK_BOARD_KINDS = [
   "weekly_high", "weekly_low", "season_champion", "season_wins", "season_points", "season_last",
+  "season_avg_points", "season_best_week", "season_worst_week",
 ];
 
 const AUTO_GRADABLE = { matchup: true, prop: true, season: false, proposition: false };
@@ -1045,6 +1214,24 @@ const STATUS_STYLE = {
   void: { label: "VOID", color: "#5b5b7a", rotate: -7 },
 };
 
+// One small accent per bet type, applied over .sb-ticket-type's default background — same
+// dark/desaturated felt-ticket palette, just enough hue difference to tell types apart at a glance.
+const TICKET_ACCENT = {
+  lineup_ml: "#1f4a37",
+  lineup_spread: "#1f4a37",
+  lineup_ou: "#4a3a12",
+  player_ou: "#3b2f52",
+  player_h2h: "#5a2530",
+};
+
+function ticketAccentStyle(bet) {
+  const bg = TICKET_ACCENT[bet.boardKind];
+  return bg ? { background: bg } : undefined;
+}
+
+// Same dark/desaturated felt-ticket palette as TICKET_ACCENT, cycled deterministically per manager.
+const AVATAR_PALETTE = ["#1f4a37", "#4a3a12", "#3b2f52", "#5a2530", "#2c4a6b", "#3a6b52", "#7a3b3b", "#5b5b7a"];
+
 function applyBetPatch(prev, payload, ownerIdByDbId, betsApiModule) {
   const { eventType, new: newRow, old: oldRow } = payload;
   if (eventType === "DELETE") {
@@ -1089,6 +1276,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   const membersApi = demo ? demoMembersApi : realMembersApi;
   const betsApi = demo ? demoBetsApi : realBetsApi;
   const poolApi = demo ? demoPoolApi : realPoolApi;
+  const survivorApi = demo ? demoSurvivorApi : realSurvivorApi;
 
   const [league, setLeague] = useState({
     linked: false,
@@ -1104,6 +1292,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     scoringLabel: "PPR",
     projectionSeason: new Date().getFullYear(),
     poolEntryFee: 5,
+    survivorEntryFee: 5,
     ownerId: null,
     subscriptionStatus: "active",
     inputId: "",
@@ -1115,6 +1304,11 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   const [myPoolDraft, setMyPoolDraft] = useState({});
   const [poolSaving, setPoolSaving] = useState(false);
   const [poolError, setPoolError] = useState(null);
+  const [survivorEntries, setSurvivorEntries] = useState([]);
+  const [survivorPicks, setSurvivorPicks] = useState([]);
+  const [mySurvivorDraft, setMySurvivorDraft] = useState("");
+  const [survivorSaving, setSurvivorSaving] = useState(false);
+  const [survivorError, setSurvivorError] = useState(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [tab, setTab] = useState("slips");
   const [showForm, setShowForm] = useState(false);
@@ -1170,6 +1364,22 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     [members],
   );
 
+  // Deterministic per-manager color + initials circle — no new Sleeper data, just a small visual
+  // anchor next to a name wherever managers are listed (ticket parties, Pool/Survivor/League lists).
+  const avatarColorFor = useCallback((id) => {
+    let hash = 0;
+    for (let i = 0; i < String(id).length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+    return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+  }, []);
+
+  const renderAvatar = useCallback((memberId) => {
+    const name = nameOf(memberId);
+    const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+    return (
+      <span className="sb-avatar" style={{ background: avatarColorFor(memberId) }}>{initials}</span>
+    );
+  }, [nameOf, avatarColorFor]);
+
   const leagueReady = league.linked && members.length > 0 && !!viewer;
 
   const dbIdByOwnerId = useMemo(
@@ -1200,6 +1410,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       scoringLabel: leagueRow.scoring_label,
       projectionSeason: leagueRow.projection_season,
       poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
+      survivorEntryFee: Number(leagueRow.survivor_entry_fee) || 5,
       ownerId: leagueRow.owner_id,
       subscriptionStatus: leagueRow.subscription_status || "active",
       inputId: leagueRow.sleeper_league_id,
@@ -1485,6 +1696,29 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     };
   }, [league.dbId]);
 
+  // ---------- survivor pool sync (Supabase Realtime) ----------
+  useEffect(() => {
+    if (!league.dbId) return;
+    let cancelled = false;
+    survivorApi.fetchEntries(league.dbId, ownerIdByDbIdRef.current).then((rows) => {
+      if (!cancelled) setSurvivorEntries(rows);
+    });
+    survivorApi.fetchPicks(league.dbId, ownerIdByDbIdRef.current).then((rows) => {
+      if (!cancelled) setSurvivorPicks(rows);
+    });
+    const offEntries = survivorApi.subscribeToEntries(league.dbId, (payload) => {
+      setSurvivorEntries((prev) => applyPoolPatch(prev, payload, ownerIdByDbIdRef.current, survivorApi.dbRowToEntry));
+    });
+    const offPicks = survivorApi.subscribeToPicks(league.dbId, (payload) => {
+      setSurvivorPicks((prev) => applyPoolPatch(prev, payload, ownerIdByDbIdRef.current, survivorApi.dbRowToPick));
+    });
+    return () => {
+      cancelled = true;
+      offEntries();
+      offPicks();
+    };
+  }, [league.dbId]);
+
   // ---------- proactively void bets the moment a player's projection drops to 0 ----------
   // Runs on every bets/weekCache change (i.e. every poll), not just when someone clicks
   // Auto-grade — a bet can be voided before its player's game even starts. Naturally
@@ -1680,13 +1914,16 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     () => Object.fromEntries(poolWeekPicks.filter((p) => p.memberId === viewer).map((p) => [p.questionKey, p.pickMemberId])),
     [poolWeekPicks, viewer],
   );
-  const iHaveSubmitted = POOL_QUESTIONS.every((q) => myPoolPicks[q.key]);
-  const poolLocked = activeWeek < currentWeek
-    || Object.values(activeWeekData).some((row) => Number(row?.points) > 0);
+  const weekQuestions = useMemo(
+    () => pickWeeklyQuestions(league.dbId, activeWeek),
+    [league.dbId, activeWeek],
+  );
+  const iHaveSubmitted = weekQuestions.every((q) => myPoolPicks[q.key]);
+  const poolLocked = weekPicksLocked(activeWeek, currentWeek, activeWeekData);
   const canSeePoolPicks = iHaveSubmitted || poolLocked;
   const poolGrading = useMemo(
-    () => gradePoolWeek(members, activeWeekData, activeProjections),
-    [members, activeWeekData, activeProjections],
+    () => gradePoolWeek(members, activeWeekData, activeProjections, players),
+    [members, activeWeekData, activeProjections, players],
   );
   const poolPot = poolWeekEntries.filter((e) => e.paid).length * (Number(league.poolEntryFee) || 5);
   const poolLeaderboard = useMemo(() => {
@@ -1697,14 +1934,14 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     });
     return Object.entries(byMember)
       .map(([memberId, picks]) => {
-        const score = POOL_QUESTIONS.reduce((sum, q) => (
+        const score = weekQuestions.reduce((sum, q) => (
           sum + (poolGrading[q.key]?.winners?.has(picks[q.key]) ? 1 : 0)
         ), 0);
-        return { memberId, score, submitted: POOL_QUESTIONS.every((q) => picks[q.key]) };
+        return { memberId, score, submitted: weekQuestions.every((q) => picks[q.key]) };
       })
       .filter((r) => r.submitted)
       .sort((a, b) => b.score - a.score);
-  }, [poolWeekPicks, poolGrading]);
+  }, [poolWeekPicks, poolGrading, weekQuestions]);
 
   useEffect(() => {
     setMyPoolDraft(myPoolPicks);
@@ -1713,7 +1950,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   }, [activeWeek, viewer]);
 
   async function submitMyPoolPicks() {
-    if (!POOL_QUESTIONS.every((q) => myPoolDraft[q.key])) {
+    if (!weekQuestions.every((q) => myPoolDraft[q.key])) {
       setPoolError("Answer all nine questions before submitting.");
       return;
     }
@@ -1763,7 +2000,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         )}
         {(!poolLocked || iHaveSubmitted) && (
           <>
-            {POOL_QUESTIONS.map((q) => (
+            {weekQuestions.map((q) => (
               <div className="sb-pool-question" key={q.key}>
                 <label>{q.prompt}</label>
                 <select
@@ -1799,10 +2036,10 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           <h3>Leaderboard</h3>
           {poolLeaderboard.map((r, i) => (
             <div className="sb-owe-row" key={r.memberId}>
-              <span style={{ color: i === 0 ? "var(--gold-bright)" : "inherit" }}>
-                {i === 0 && <Trophy size={12} style={{ marginRight: "0.3rem" }} />}{nameOf(r.memberId)}
+              <span style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: i === 0 ? "var(--gold-bright)" : "inherit" }}>
+                {i === 0 && <Trophy size={12} />}{renderAvatar(r.memberId)}{nameOf(r.memberId)}
               </span>
-              <span style={{ marginLeft: "auto" }}>{r.score} / {POOL_QUESTIONS.length}</span>
+              <span style={{ marginLeft: "auto" }}>{r.score} / {weekQuestions.length}</span>
             </div>
           ))}
         </div>
@@ -1810,6 +2047,163 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       {!canSeePoolPicks && (
         <div className="sb-empty">Submit your own picks to see everyone else's and the live leaderboard.</div>
       )}
+    </div>
+  );
+
+  // ---------- survivor pool ----------
+  const survivorPicksByWeek = useMemo(() => {
+    const byWeek = {};
+    survivorPicks.forEach((p) => {
+      if (!byWeek[p.week]) byWeek[p.week] = {};
+      byWeek[p.week][p.memberId] = p.pickMemberId;
+    });
+    return byWeek;
+  }, [survivorPicks]);
+
+  const survivorStatus = useMemo(
+    () => computeSurvivorStatus(members, survivorPicksByWeek, currentWeek, weekCache),
+    [members, survivorPicksByWeek, currentWeek, weekCache],
+  );
+
+  const mySurvivorEntry = survivorEntries.find((e) => e.memberId === viewer) || null;
+  const myStatus = survivorStatus[viewer] || { alive: true, eliminatedWeek: null };
+  const mySurvivorPick = survivorPicksByWeek[activeWeek]?.[viewer] || "";
+  const survivorLocked = weekPicksLocked(activeWeek, currentWeek, activeWeekData);
+  const iHaveSubmittedSurvivor = !!mySurvivorPick;
+  const canSeeSurvivorWeekPicks = iHaveSubmittedSurvivor || survivorLocked;
+  const survivorWeekPicks = useMemo(
+    () => survivorPicks.filter((p) => p.week === activeWeek),
+    [survivorPicks, activeWeek],
+  );
+  const survivorUsedIds = useMemo(() => new Set(
+    survivorPicks.filter((p) => p.memberId === viewer && p.week !== activeWeek).map((p) => p.pickMemberId),
+  ), [survivorPicks, viewer, activeWeek]);
+  const survivorPot = survivorEntries.filter((e) => e.paid).length * (Number(league.survivorEntryFee) || 5);
+  const survivorLeaderboard = useMemo(() => {
+    const alive = [];
+    const eliminated = [];
+    members.forEach((m) => {
+      const s = survivorStatus[m.id] || { alive: true, eliminatedWeek: null };
+      (s.alive ? alive : eliminated).push({ memberId: m.id, ...s });
+    });
+    eliminated.sort((a, b) => (b.eliminatedWeek || 0) - (a.eliminatedWeek || 0));
+    return { alive, eliminated };
+  }, [members, survivorStatus]);
+
+  useEffect(() => {
+    setMySurvivorDraft(mySurvivorPick);
+    // only reset the draft when the viewer switches weeks, not on every realtime pick update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWeek, viewer]);
+
+  async function submitMySurvivorPick() {
+    if (!mySurvivorDraft) {
+      setSurvivorError("Pick a manager before submitting.");
+      return;
+    }
+    setSurvivorSaving(true);
+    setSurvivorError(null);
+    try {
+      await survivorApi.submitPick(league.dbId, activeWeek, dbIdByOwnerId[viewer], dbIdByOwnerId[mySurvivorDraft]);
+    } catch (err) {
+      setSurvivorError(err.message || "Couldn't save your pick — try again.");
+    } finally {
+      setSurvivorSaving(false);
+    }
+  }
+
+  async function toggleSurvivorPaid() {
+    if (!mySurvivorEntry) return;
+    try {
+      await survivorApi.setPaid(mySurvivorEntry.id, !mySurvivorEntry.paid);
+    } catch {
+      // best-effort — the toggle will just not flip visually
+    }
+  }
+
+  const renderSurvivorTab = () => (
+    <div>
+      {renderWeekNav()}
+      <div className="sb-board sb-pool-strip">
+        <h3>Survivor Pool</h3>
+        <p className="sb-note">
+          ${league.survivorEntryFee || 5} to enter · {survivorEntries.filter((e) => e.paid).length} paid in ·
+          pot is ${survivorPot}. Pick one manager each week you think wins their real Sleeper matchup — pick
+          wrong, or reuse a manager you've already picked, and you're out. Last one standing takes the pot.
+        </p>
+        {mySurvivorEntry && (
+          <button type="button" className={`sb-btn ${mySurvivorEntry.paid ? "sb-btn-accept" : "sb-btn-submit"}`} onClick={toggleSurvivorPaid}>
+            {mySurvivorEntry.paid ? <Check size={12} /> : <Coins size={12} />} {mySurvivorEntry.paid ? "You're paid in" : "Mark yourself paid"}
+          </button>
+        )}
+      </div>
+
+      <div className="sb-board">
+        <h3>Week {activeWeek} Pick</h3>
+        {!myStatus.alive && (
+          <div className="sb-empty">You were eliminated in Week {myStatus.eliminatedWeek}.</div>
+        )}
+        {myStatus.alive && survivorLocked && !iHaveSubmittedSurvivor && (
+          <div className="sb-empty">This week's survivor picks have already started — picks are locked.</div>
+        )}
+        {myStatus.alive && (!survivorLocked || iHaveSubmittedSurvivor) && (
+          <>
+            <div className="sb-pool-question">
+              <label>Who wins their matchup this week?</label>
+              <select
+                value={mySurvivorDraft}
+                disabled={survivorLocked}
+                onChange={(e) => setMySurvivorDraft(e.target.value)}
+              >
+                <option value="">Select a manager…</option>
+                {members.filter((m) => !survivorUsedIds.has(m.id)).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+            {survivorError && <div className="sb-error-banner"><AlertTriangle size={12} /> {survivorError}</div>}
+            {!survivorLocked && (
+              <div className="sb-form-actions">
+                <button type="button" className="sb-btn sb-btn-submit" onClick={submitMySurvivorPick} disabled={survivorSaving}>
+                  {survivorSaving ? "Saving…" : iHaveSubmittedSurvivor ? "Update Pick" : "Submit Pick"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {canSeeSurvivorWeekPicks && survivorWeekPicks.length > 0 && (
+        <div className="sb-board">
+          <h3>This Week's Picks</h3>
+          {survivorWeekPicks.map((p) => (
+            <div className="sb-owe-row" key={p.id}>
+              <span>{nameOf(p.memberId)}</span>
+              <span style={{ marginLeft: "auto" }}>{nameOf(p.pickMemberId)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="sb-board">
+        <h3>Standings</h3>
+        <div className="sb-note">Alive</div>
+        {survivorLeaderboard.alive.length === 0 && <div className="sb-empty">Nobody's alive.</div>}
+        {survivorLeaderboard.alive.map((r) => (
+          <div className="sb-owe-row" key={r.memberId}>
+            <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>{renderAvatar(r.memberId)}{nameOf(r.memberId)}</span>
+          </div>
+        ))}
+        {survivorLeaderboard.eliminated.length > 0 && (
+          <>
+            <div className="sb-note" style={{ marginTop: "0.6rem" }}>Eliminated</div>
+            {survivorLeaderboard.eliminated.map((r) => (
+              <div className="sb-owe-row" key={r.memberId} style={{ opacity: 0.6 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>{renderAvatar(r.memberId)}{nameOf(r.memberId)}</span>
+                <span style={{ marginLeft: "auto" }}>Wk {r.eliminatedWeek}</span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 
@@ -1882,8 +2276,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   );
 
   const seasonBoardOfferings = useMemo(
-    () => generateSeasonBoardOfferings(members, playoffTeams),
-    [members, playoffTeams],
+    () => generateSeasonBoardOfferings(members, playoffTeams, weekCache, currentWeek),
+    [members, playoffTeams, weekCache, currentWeek],
   );
 
   const filteredWeeklyBoardOfferings = useMemo(
@@ -2872,9 +3266,12 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         <div className="sb-ticket-top">
           <div>
             <div className="sb-ticket-num">TICKET NO. {b.ticket}</div>
-            <div className="sb-ticket-type">{ticketTypeLabel(b)}{b.week ? ` · Wk ${b.week}` : ""}</div>
+            <div className="sb-ticket-type" style={ticketAccentStyle(b)}>{ticketTypeLabel(b)}{b.week ? ` · Wk ${b.week}` : ""}</div>
             <div className="sb-ticket-title">{b.title}</div>
-            <div className="sb-ticket-parties">{nameOf(b.creator)} <span style={{ opacity: 0.5 }}>vs</span> {b.opponent ? nameOf(b.opponent) : "Open"}</div>
+            <div className="sb-ticket-parties">
+              {renderAvatar(b.creator)} {nameOf(b.creator)} <span style={{ opacity: 0.5 }}>vs</span>{" "}
+              {b.opponent ? (<>{renderAvatar(b.opponent)} {nameOf(b.opponent)}</>) : "Open"}
+            </div>
             {b.odds != null && (
               <div className="sb-ticket-odds">
                 {formatOdds(b.odds)} · win ${b.toWin ?? payoutFromOdds(b.stake, b.odds)}
@@ -3122,25 +3519,32 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         <button className={`sb-tab ${tab === "matchup" ? "active" : ""}`} onClick={() => setTab("matchup")}>
           <Swords size={16} /> Matchup
         </button>
-        <button className={`sb-tab ${tab === "pool" ? "active" : ""}`} onClick={() => setTab("pool")}>
-          <Coins size={16} /> Pool
-        </button>
         <button className={`sb-tab ${tab === "slips" ? "active" : ""}`} onClick={() => setTab("slips")}>
           <ScrollText size={16} /> Bet Slips
         </button>
+        <span className="sb-tab-divider" aria-hidden="true" />
+        <button className={`sb-tab ${tab === "pool" ? "active" : ""}`} onClick={() => setTab("pool")}>
+          <Coins size={16} /> Pool
+        </button>
+        <button className={`sb-tab ${tab === "survivor" ? "active" : ""}`} onClick={() => setTab("survivor")}>
+          <Skull size={16} /> Survivor
+        </button>
+        <span className="sb-tab-divider" aria-hidden="true" />
         <button className={`sb-tab ${tab === "ledger" ? "active" : ""}`} onClick={() => setTab("ledger")}>
           <Trophy size={16} /> Ledger
         </button>
         <button className={`sb-tab ${tab === "sync" ? "active" : ""}`} onClick={() => setTab("sync")}>
           <Link2 size={16} /> League
         </button>
-        <button className="sb-newbet-btn" onClick={() => {
-          setShowForm(false);
-          setBuilderCategory(null);
-          setBuilderOpen((s) => !s);
-        }}>
-          <Plus size={13} /> Create Side Bet
-        </button>
+        {["board", "matchup", "slips"].includes(tab) && (
+          <button className="sb-newbet-btn" onClick={() => {
+            setShowForm(false);
+            setBuilderCategory(null);
+            setBuilderOpen((s) => !s);
+          }}>
+            <Plus size={13} /> Create Side Bet
+          </button>
+        )}
       </div>
 
       <div className="sb-content">
@@ -3348,6 +3752,8 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
 
         {tab === "pool" && renderPoolTab()}
 
+        {tab === "survivor" && renderSurvivorTab()}
+
         {tab === "slips" && (
           <div>
             {renderWeekNav(
@@ -3483,14 +3889,42 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                 <div className="sb-board">
                   <h3>Season Standings (net $)</h3>
                   <p className="sb-note">Running total across all graded slips, including season futures when they settle.</p>
-                  {members.slice().sort((a, b) => ledger.totals[b.id] - ledger.totals[a.id]).map((m) => (
-                    <div className="sb-standing-row" key={m.id}>
-                      <span className="sb-standing-name">{m.name}</span>
-                      <span style={{ color: ledger.totals[m.id] >= 0 ? "#9ad6b3" : "#e0949a" }}>
-                        {ledger.totals[m.id] >= 0 ? "+" : "-"}${Math.abs(ledger.totals[m.id])}
-                      </span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const sorted = members.slice().sort((a, b) => ledger.totals[b.id] - ledger.totals[a.id]);
+                    const podium = sorted.slice(0, 3);
+                    const rest = sorted.slice(3);
+                    return (
+                      <>
+                        {podium.length > 0 && (
+                          <div className="sb-podium">
+                            {[1, 0, 2].filter((i) => podium[i]).map((i) => {
+                              const m = podium[i];
+                              return (
+                                <div className={`sb-podium-spot sb-podium-${i + 1}`} key={m.id}>
+                                  <div className="sb-podium-rank">{i + 1}</div>
+                                  {renderAvatar(m.id)}
+                                  <div className="sb-podium-name">{m.name}</div>
+                                  <div className="sb-podium-amount" style={{ color: ledger.totals[m.id] >= 0 ? "#9ad6b3" : "#e0949a" }}>
+                                    {ledger.totals[m.id] >= 0 ? "+" : "-"}${Math.abs(ledger.totals[m.id])}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {rest.map((m) => (
+                          <div className="sb-standing-row" key={m.id}>
+                            <span className="sb-standing-name" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                              {renderAvatar(m.id)}{m.name}
+                            </span>
+                            <span style={{ color: ledger.totals[m.id] >= 0 ? "#9ad6b3" : "#e0949a" }}>
+                              {ledger.totals[m.id] >= 0 ? "+" : "-"}${Math.abs(ledger.totals[m.id])}
+                            </span>
+                          </div>
+                        ))}
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="sb-board">
                   <h3>Season Settlements</h3>
@@ -3575,11 +4009,35 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
             </div>
 
             <div className="sb-board">
+              <h3>Survivor Pool</h3>
+              <p className="sb-note">Default entry fee everyone antes up for the season. Editing this only changes new entries.</p>
+              <div className="sb-pool-question" style={{ borderBottom: "none", padding: 0 }}>
+                <label>Entry fee ($)</label>
+                <select
+                  value={String(league.survivorEntryFee || 5)}
+                  onChange={async (e) => {
+                    const fee = Number(e.target.value);
+                    setLeague((s) => ({ ...s, survivorEntryFee: fee }));
+                    try {
+                      await leaguesApi.upsertLeague(league.leagueId, { survivor_entry_fee: fee });
+                    } catch {
+                      // best-effort — worst case the fee display reverts on next refresh
+                    }
+                  }}
+                >
+                  {[5, 10, 15, 20, 25].map((v) => <option key={v} value={v}>${v}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="sb-board">
               <h3>League Managers</h3>
               <p className="sb-note">Rosters pulled from Sleeper — used for auto-grading matchup bets.</p>
               {members.map((m) => (
                 <div className="sb-sync-row" key={m.id}>
-                  <span className="sb-standing-name">{m.name}</span>
+                  <span className="sb-standing-name" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                    {renderAvatar(m.id)}{m.name}
+                  </span>
                   {m.teamName && (
                     <span className="sb-mono" style={{ fontSize: "0.68rem", color: "#7ea08f" }}>{m.displayName}</span>
                   )}

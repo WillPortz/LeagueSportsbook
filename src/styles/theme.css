@@ -49,6 +49,7 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-tabs { display: flex; gap: 0.3rem; padding: 0.9rem 1.25rem 0; flex-wrap: wrap; }
 .sb-tab { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.04em; padding: 0.5rem 1.1rem 0.6rem; color: #a9c4b6; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; }
 .sb-tab.active { color: var(--gold-bright); border-bottom-color: var(--gold); }
+.sb-tab-divider { width: 1px; align-self: stretch; margin: 0.4rem 0.35rem; background: var(--line); }
 
 .sb-newbet-btn { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; background: var(--gold); color: #241d05; border: none; padding: 0.5rem 0.8rem; border-radius: 3px; display: flex; align-items: center; gap: 0.35rem; cursor: pointer; font-weight: 600; }
 .sb-newbet-btn:hover { background: var(--gold-bright); }
@@ -63,7 +64,8 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-ticket-num { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; letter-spacing: 0.08em; }
 .sb-ticket-type { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; background: var(--felt); color: var(--gold-bright); padding: 0.15rem 0.5rem; border-radius: 2px; margin-bottom: 0.35rem; }
 .sb-ticket-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; line-height: 1.15; letter-spacing: 0.01em; }
-.sb-ticket-parties { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #5a5340; margin-top: 0.3rem; }
+.sb-ticket-parties { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: #5a5340; margin-top: 0.3rem; display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
+.sb-avatar { display: inline-flex; align-items: center; justify-content: center; width: 1.3rem; height: 1.3rem; border-radius: 50%; font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; font-weight: 600; color: var(--paper); flex: none; }
 .sb-ticket-stake { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--green); text-align: right; white-space: nowrap; }
 .sb-ticket-stake span { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.6rem; color: #8a7c55; letter-spacing: 0.1em; }
 
@@ -88,6 +90,17 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-board p.sb-note { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: #7ea08f; margin: -0.4rem 0 0.9rem; line-height: 1.5; }
 .sb-standing-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; }
 .sb-standing-row:last-child { border-bottom: none; }
+
+.sb-podium { display: flex; align-items: flex-end; justify-content: center; gap: 0.6rem; margin-bottom: 1rem; }
+.sb-podium-spot { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; background: var(--felt-dark); border-radius: 6px 6px 0 0; padding: 0.7rem 0.9rem 0.6rem; min-width: 5.5rem; }
+.sb-podium-1 { min-height: 6.4rem; border-top: 3px solid var(--gold-bright); }
+.sb-podium-2 { min-height: 5.1rem; border-top: 3px solid #b9c2c9; }
+.sb-podium-3 { min-height: 4.5rem; border-top: 3px solid #c98a4a; }
+.sb-podium-rank { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; color: var(--gold-bright); }
+.sb-podium-2 .sb-podium-rank { color: #b9c2c9; }
+.sb-podium-3 .sb-podium-rank { color: #c98a4a; }
+.sb-podium-name { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; text-align: center; }
+.sb-podium-amount { font-family: 'Bebas Neue', sans-serif; font-size: 1rem; }
 .sb-standing-name { font-family: 'Inter', sans-serif; font-weight: 600; }
 .sb-owe-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0; border-bottom: 1px solid var(--line); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
 .sb-owe-row:last-child { border-bottom: none; }
