@@ -55,11 +55,6 @@ html, body, #root { margin: 0; min-height: 100%; }
 
 .sb-subtabs { display: flex; gap: 0.3rem; padding: 0.35rem 1.25rem 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
 .sb-subtab { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.4rem 0.7rem; color: #7ea08f; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; display: flex; align-items: center; gap: 0.3rem; margin-bottom: -1px; }
-
-@media (max-width: 640px) {
-  .sb-tabs, .sb-subtabs { justify-content: center; }
-  .sb-newbet-btn { margin-left: 0; }
-}
 .sb-subtab.active { color: var(--gold-bright); border-bottom-color: var(--gold); }
 
 .sb-content { padding: 1.25rem; max-width: 880px; margin: 0 auto; }
