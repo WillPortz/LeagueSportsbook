@@ -2574,7 +2574,11 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       type: offering.type,
       title,
       creator: viewer,
-      opponent: null, // open — any other league member may accept
+      // Matchup/Player-vs-Player offerings that carry a specific counterparty (the Matchup tab,
+      // and the Matchup/Player-vs-Player Create Side Bet builders) go straight to that person —
+      // everything else (the Board tab's generic lines on matchups you're not part of) stays open
+      // for any league member to accept.
+      opponent: offering.counterpartyId ?? null,
       stake,
       status: "pending",
       result: null,
