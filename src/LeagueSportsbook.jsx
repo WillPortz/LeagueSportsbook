@@ -3567,7 +3567,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                   setBuilderCategory(null);
                   setBuilderOpen((s) => !s);
                 }}>
-                  <Plus size={13} /> Create Side Bet
+                  <Plus size={15} /> Create Side Bet
                 </button>
               )}
             </div>
