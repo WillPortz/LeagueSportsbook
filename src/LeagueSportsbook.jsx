@@ -1901,6 +1901,16 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     if (weekNavIndex > 0) setSelectedWeek(seasonWeeks[weekNavIndex - 1]);
   };
 
+  const renderCreateSideBetButton = () => (
+    <button className="sb-newbet-btn" onClick={() => {
+      setShowForm(false);
+      setBuilderCategory(null);
+      setBuilderOpen((s) => !s);
+    }}>
+      <Plus size={15} /> Create Side Bet
+    </button>
+  );
+
   const renderWeekNav = (extra = null) => (
     <div className="sb-slips-header">
       <div className="sb-week-nav" style={{ marginBottom: 0 }}>
@@ -3561,15 +3571,6 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                   <g.icon size={16} /> {g.label}
                 </button>
               ))}
-              {["board", "matchup", "slips"].includes(tab) && (
-                <button className="sb-newbet-btn" onClick={() => {
-                  setShowForm(false);
-                  setBuilderCategory(null);
-                  setBuilderOpen((s) => !s);
-                }}>
-                  <Plus size={15} /> Create Side Bet
-                </button>
-              )}
             </div>
             {activeGroup.tabs && (
               <div className="sb-subtabs">
@@ -3670,9 +3671,12 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         {tab === "board" && (
           <div>
             {renderWeekNav(
-              <button className="sb-btn sb-btn-auto" onClick={() => loadWeekData(activeWeek, { force: true, showSpinner: true })} disabled={league.loading}>
-                <RefreshCw size={12} /> {league.loading ? "Loading…" : "Refresh lines"}
-              </button>,
+              <div className="sb-header-actions">
+                <button className="sb-btn sb-btn-auto" onClick={() => loadWeekData(activeWeek, { force: true, showSpinner: true })} disabled={league.loading}>
+                  <RefreshCw size={12} /> {league.loading ? "Loading…" : "Refresh lines"}
+                </button>
+                {renderCreateSideBetButton()}
+              </div>,
             )}
 
             <p className="sb-note" style={{ marginBottom: "0.85rem", color: "#7ea08f" }}>
@@ -3730,9 +3734,12 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                   Tap a starter for their O/U line, or pick one from each side for a head-to-head bet.
                 </p>
               </div>
-              <button className="sb-btn sb-btn-auto" onClick={() => loadWeekData(matchupWeek, { force: true, showSpinner: true })} disabled={league.loading}>
-                <RefreshCw size={12} /> {league.loading ? "Loading…" : "Refresh"}
-              </button>
+              <div className="sb-header-actions">
+                <button className="sb-btn sb-btn-auto" onClick={() => loadWeekData(matchupWeek, { force: true, showSpinner: true })} disabled={league.loading}>
+                  <RefreshCw size={12} /> {league.loading ? "Loading…" : "Refresh"}
+                </button>
+                {renderCreateSideBetButton()}
+              </div>
             </div>
 
             {league.loading && !matchupDataReady ? (
@@ -3798,10 +3805,13 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         {tab === "slips" && (
           <div>
             {renderWeekNav(
-              <div className="sb-slips-summary">
-                {weekSlipSummary.total === 0
-                  ? "No slips this week"
-                  : `${weekSlipSummary.total} slip${weekSlipSummary.total !== 1 ? "s" : ""} · ${weekSlipSummary.open} open · $${weekSlipSummary.stake} on the board`}
+              <div className="sb-header-actions">
+                <div className="sb-slips-summary">
+                  {weekSlipSummary.total === 0
+                    ? "No slips this week"
+                    : `${weekSlipSummary.total} slip${weekSlipSummary.total !== 1 ? "s" : ""} · ${weekSlipSummary.open} open · $${weekSlipSummary.stake} on the board`}
+                </div>
+                {renderCreateSideBetButton()}
               </div>,
             )}
 
