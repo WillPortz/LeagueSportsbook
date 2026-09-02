@@ -3552,16 +3552,14 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         return (
           <>
             <div className="sb-tabs">
-              {TAB_GROUPS.map((g, i) => (
-                <React.Fragment key={g.id}>
-                  {i === 2 && <span className="sb-tab-divider" aria-hidden="true" />}
-                  <button
-                    className={`sb-tab ${activeGroup.id === g.id ? "active" : ""}`}
-                    onClick={() => setTab(g.tabs ? g.tabs[0].id : g.id)}
-                  >
-                    <g.icon size={16} /> {g.label}
-                  </button>
-                </React.Fragment>
+              {TAB_GROUPS.map((g) => (
+                <button
+                  key={g.id}
+                  className={`sb-tab ${activeGroup.id === g.id ? "active" : ""}`}
+                  onClick={() => setTab(g.tabs ? g.tabs[0].id : g.id)}
+                >
+                  <g.icon size={16} /> {g.label}
+                </button>
               ))}
               {["board", "matchup", "slips"].includes(tab) && (
                 <button className="sb-newbet-btn" onClick={() => {
