@@ -1271,6 +1271,37 @@ function applyPoolPatch(prev, payload, ownerIdByDbId, mapRow) {
   return next;
 }
 
+// Top-level nav collapses down to 4 buttons; "Wagering" and "Pools" each hold a couple of
+// leaf tabs shown as a second row of pills once that group is active. Ledger/League have no
+// children — clicking them sets `tab` directly, same as before this grouping existed.
+const TAB_GROUPS = [
+  {
+    id: "wagering",
+    label: "Wagering",
+    icon: TrendingUp,
+    tabs: [
+      { id: "board", label: "Board", icon: TrendingUp },
+      { id: "matchup", label: "Matchup", icon: Swords },
+      { id: "slips", label: "Bet Slips", icon: ScrollText },
+    ],
+  },
+  {
+    id: "pools",
+    label: "Pools",
+    icon: Coins,
+    tabs: [
+      { id: "pool", label: "Pool", icon: Coins },
+      { id: "survivor", label: "Survivor", icon: Skull },
+    ],
+  },
+  { id: "ledger", label: "Ledger", icon: Trophy, tabs: null },
+  { id: "sync", label: "League", icon: Link2, tabs: null },
+];
+
+function groupForTab(tabId) {
+  return TAB_GROUPS.find((g) => (g.tabs ? g.tabs.some((t) => t.id === tabId) : g.id === tabId));
+}
+
 export default function LeagueSportsbook({ session, demo = false, onExitDemo }) {
   const leaguesApi = demo ? demoLeaguesApi : realLeaguesApi;
   const membersApi = demo ? demoMembersApi : realMembersApi;
@@ -3516,40 +3547,48 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         </div>
       )}
 
-      <div className="sb-tabs">
-        <button className={`sb-tab ${tab === "board" ? "active" : ""}`} onClick={() => setTab("board")}>
-          <TrendingUp size={16} /> Board
-        </button>
-        <button className={`sb-tab ${tab === "matchup" ? "active" : ""}`} onClick={() => setTab("matchup")}>
-          <Swords size={16} /> Matchup
-        </button>
-        <button className={`sb-tab ${tab === "slips" ? "active" : ""}`} onClick={() => setTab("slips")}>
-          <ScrollText size={16} /> Bet Slips
-        </button>
-        <span className="sb-tab-divider" aria-hidden="true" />
-        <button className={`sb-tab ${tab === "pool" ? "active" : ""}`} onClick={() => setTab("pool")}>
-          <Coins size={16} /> Pool
-        </button>
-        <button className={`sb-tab ${tab === "survivor" ? "active" : ""}`} onClick={() => setTab("survivor")}>
-          <Skull size={16} /> Survivor
-        </button>
-        <span className="sb-tab-divider" aria-hidden="true" />
-        <button className={`sb-tab ${tab === "ledger" ? "active" : ""}`} onClick={() => setTab("ledger")}>
-          <Trophy size={16} /> Ledger
-        </button>
-        <button className={`sb-tab ${tab === "sync" ? "active" : ""}`} onClick={() => setTab("sync")}>
-          <Link2 size={16} /> League
-        </button>
-        {["board", "matchup", "slips"].includes(tab) && (
-          <button className="sb-newbet-btn" onClick={() => {
-            setShowForm(false);
-            setBuilderCategory(null);
-            setBuilderOpen((s) => !s);
-          }}>
-            <Plus size={13} /> Create Side Bet
-          </button>
-        )}
-      </div>
+      {(() => {
+        const activeGroup = groupForTab(tab) || TAB_GROUPS[0];
+        return (
+          <>
+            <div className="sb-tabs">
+              {TAB_GROUPS.map((g, i) => (
+                <React.Fragment key={g.id}>
+                  {i === 2 && <span className="sb-tab-divider" aria-hidden="true" />}
+                  <button
+                    className={`sb-tab ${activeGroup.id === g.id ? "active" : ""}`}
+                    onClick={() => setTab(g.tabs ? g.tabs[0].id : g.id)}
+                  >
+                    <g.icon size={16} /> {g.label}
+                  </button>
+                </React.Fragment>
+              ))}
+              {["board", "matchup", "slips"].includes(tab) && (
+                <button className="sb-newbet-btn" onClick={() => {
+                  setShowForm(false);
+                  setBuilderCategory(null);
+                  setBuilderOpen((s) => !s);
+                }}>
+                  <Plus size={13} /> Create Side Bet
+                </button>
+              )}
+            </div>
+            {activeGroup.tabs && (
+              <div className="sb-subtabs">
+                {activeGroup.tabs.map((t) => (
+                  <button
+                    key={t.id}
+                    className={`sb-subtab ${tab === t.id ? "active" : ""}`}
+                    onClick={() => setTab(t.id)}
+                  >
+                    <t.icon size={14} /> {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <div className="sb-content">
         {builderOpen && (
