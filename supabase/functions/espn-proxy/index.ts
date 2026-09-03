@@ -88,6 +88,23 @@ Deno.serve(async (req) => {
     return json({ error: "invalid_request" }, 400, origin);
   }
 
+  // TEMPORARY diagnostic, unauthenticated on purpose — hits a neutral echo endpoint with the
+  // same Cookie-header construction used against ESPN, to isolate "Deno's fetch silently drops
+  // Cookie" from "ESPN/Cloudflare specifically is rejecting this." Remove once the ESPN 202
+  // issue is solved; touches no user data or secrets.
+  try {
+    const peekBody = await req.clone().json();
+    if (peekBody?.mode === "debug_echo") {
+      const echoRes = await fetch("https://httpbin.org/headers", {
+        headers: { "User-Agent": ESPN_UA, Cookie: "espn_s2=debugtest; SWID={DEBUG-TEST}" },
+      });
+      const echoData = await echoRes.json();
+      return json({ echoStatus: echoRes.status, echoHeaders: echoData.headers }, 200, origin);
+    }
+  } catch {
+    // not JSON / no mode field — fall through to normal handling below
+  }
+
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
   const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
