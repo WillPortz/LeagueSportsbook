@@ -17,10 +17,7 @@ export function dbRowToMember(row) {
   };
 }
 
-// Shared by both providers — the members table's sleeper_owner_id/roster_id columns hold ESPN's
-// team-id equivalents too (see the comment above the table in schema.sql), so there's exactly
-// one upsert implementation regardless of which provider built `builtMembers`.
-async function syncMembers(leagueId, builtMembers) {
+export async function syncMembersFromSleeper(leagueId, builtMembers) {
   const rows = builtMembers.map((m) => ({
     league_id: leagueId,
     sleeper_owner_id: m.id,
@@ -41,14 +38,6 @@ async function syncMembers(leagueId, builtMembers) {
     .select();
   if (error) throw error;
   return data.map(dbRowToMember);
-}
-
-export function syncMembersFromSleeper(leagueId, builtMembers) {
-  return syncMembers(leagueId, builtMembers);
-}
-
-export function syncMembersFromEspn(leagueId, builtMembers) {
-  return syncMembers(leagueId, builtMembers);
 }
 
 export async function fetchMembers(leagueId) {

@@ -8,7 +8,6 @@ import * as realMembersApi from "./lib/membersApi.js";
 import * as realBetsApi from "./lib/betsApi.js";
 import * as realPoolApi from "./lib/poolApi.js";
 import * as realSurvivorApi from "./lib/survivorApi.js";
-import * as espnApi from "./lib/espnApi.js";
 import { demoLeaguesApi, demoMembersApi, demoBetsApi, demoPoolApi, demoSurvivorApi } from "./lib/demoApi.js";
 import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoData.js";
 import { signOut, updateLastActiveLeague } from "./lib/auth.js";
@@ -1312,15 +1311,11 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
 
   const [league, setLeague] = useState({
     linked: false,
-    provider: "sleeper",
     dbId: null,
     leagueId: "",
     leagueName: "",
     loading: false,
     error: null,
-    // needsReconnect: ESPN-only — set when a previously-working stored espn_s2/SWID gets
-    // rejected by ESPN (expired session), distinct from never having supplied credentials.
-    needsReconnect: false,
     week: 1,
     season: new Date().getFullYear(),
     nflSeasonType: "regular",
@@ -1355,20 +1350,6 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   const [addLeagueId, setAddLeagueId] = useState("");
   const [addLeagueError, setAddLeagueError] = useState(null);
   const [addLeagueLoading, setAddLeagueLoading] = useState(false);
-
-  // ---------- ESPN linking ----------
-  // linkProvider is shared by both the "Link Your League" card and "Add Another League" modal —
-  // only one of those two is ever visible at once, so one toggle covers both. espn_s2/swid stay
-  // hidden until a first "Connect league" attempt comes back espn_auth_required (needsCookies) —
-  // that's the "try public first" flow, implemented as UI state rather than a pre-emptive question.
-  const [linkProvider, setLinkProvider] = useState("sleeper");
-  const [espnForm, setEspnForm] = useState({
-    leagueId: "", season: new Date().getFullYear(), espn_s2: "", swid: "", needsCookies: false,
-  });
-  const [espnLinkLoading, setEspnLinkLoading] = useState(false);
-  const [espnLinkError, setEspnLinkError] = useState(null);
-  const [espnReconnectForm, setEspnReconnectForm] = useState({ espn_s2: "", swid: "" });
-  const [espnReconnectLoading, setEspnReconnectLoading] = useState(false);
 
   const viewer = useMemo(
     () => members.find((m) => m.userId === session.user.id)?.id || "",
@@ -1447,14 +1428,11 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
   // to the active `league` state — shared by bootstrap, switchLeague, and adding a new league,
   // so "which league's details are showing" always comes from one place.
   const applyLeagueRow = useCallback((leagueRow) => {
-    const provider = leagueRow.provider || "sleeper";
-    const providerLeagueId = provider === "espn" ? leagueRow.espn_league_id : leagueRow.sleeper_league_id;
     setLeague((s) => ({
       ...s,
       linked: true,
-      provider,
       dbId: leagueRow.id,
-      leagueId: providerLeagueId,
+      leagueId: leagueRow.sleeper_league_id,
       leagueName: leagueRow.name,
       week: leagueRow.current_week,
       season: leagueRow.season,
@@ -1466,8 +1444,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
       survivorEntryFee: Number(leagueRow.survivor_entry_fee) || 5,
       ownerId: leagueRow.owner_id,
       subscriptionStatus: leagueRow.subscription_status || "active",
-      inputId: providerLeagueId,
-      needsReconnect: false,
+      inputId: leagueRow.sleeper_league_id,
       loading: false,
       error: null,
     }));
@@ -1574,31 +1551,6 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     };
   }, []);
 
-  // ESPN counterpart of fetchLeagueData — same return shape, so connectEspnLeague/refreshLeague's
-  // ESPN branch can reuse the exact same downstream upsert/state-setting code as Sleeper.
-  // `credentials`/`leagueDbId` pass straight through to espnApi.linkEspnLeague: credentials are
-  // only present on a retry after an espn_auth_required response, and leagueDbId (only set on
-  // refresh, not first-time linking) lets the Edge Function fall back to stored credentials
-  // instead of requiring them re-entered. ESPN doesn't have a separate "PPR vs Standard" scoring
-  // field the way Sleeper does — every player's points already come pre-scored from ESPN — so
-  // scoringField/scoringLabel are fixed rather than derived.
-  const fetchEspnLeagueData = useCallback(async (espnLeagueId, season, credentials = null, leagueDbId = null) => {
-    const data = await espnApi.linkEspnLeague(espnLeagueId, season, credentials, leagueDbId);
-    const builtMembers = espnApi.buildMembersFromEspn(data.teams);
-    if (builtMembers.length === 0) throw new Error("empty");
-    const week = data.status?.currentMatchupPeriod || data.status?.latestScoringPeriod || 1;
-    return {
-      leagueName: data.settings?.name || "Your League",
-      members: builtMembers,
-      week,
-      season,
-      projectionSeason: season,
-      nflSeasonType: "regular",
-      scoringField: "espn",
-      scoringLabel: "ESPN",
-    };
-  }, []);
-
   // Also used to add a *second* (or third...) league to an already-linked account — the only
   // difference from first-time linking is that here there's existing league-scoped state to
   // clear first, so the new league can't show up blended with the old one even momentarily.
@@ -1628,10 +1580,30 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         setWeekCache({});
       }
       setMembers(memberRows);
-      applyLeagueRow(leagueRow);
+      setLeague((s) => ({
+        ...s,
+        linked: true,
+        dbId: leagueRow.id,
+        leagueId: leagueId.trim(),
+        leagueName: data.leagueName,
+        week: data.week,
+        season: data.season,
+        projectionSeason: data.projectionSeason,
+        nflSeasonType: data.nflSeasonType,
+        scoringField: data.scoringField,
+        scoringLabel: data.scoringLabel,
+        poolEntryFee: Number(leagueRow.pool_entry_fee) || 5,
+        ownerId: leagueRow.owner_id,
+        subscriptionStatus: leagueRow.subscription_status || "active",
+        loading: false,
+        error: null,
+        inputId: leagueId.trim(),
+      }));
       setMyLeagues((prev) => (
         prev.some((l) => l.id === leagueRow.id) ? prev : [...prev, leagueRow]
       ));
+      setSelectedWeek(data.week);
+      setForm((f) => ({ ...f, week: data.week }));
       updateLastActiveLeague(leagueRow.id).catch(() => {});
       setAddingLeague(false);
       setAddLeagueId("");
@@ -1648,61 +1620,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         }));
       }
     }
-  }, [fetchLeagueData, applyLeagueRow]);
-
-  // Kept separate from connectLeague rather than a provider branch inside it — threading a
-  // provider param through every line of the working Sleeper path isn't worth the risk for a
-  // second provider that has a genuinely different shape (season year, optional cookies).
-  const connectEspnLeague = useCallback(async (espnLeagueId, season, credentials, { isAdditional = false } = {}) => {
-    if (demo || !espnLeagueId.trim()) return;
-    setEspnLinkLoading(true);
-    setEspnLinkError(null);
-    try {
-      const data = await fetchEspnLeagueData(espnLeagueId.trim(), season, credentials);
-      const leagueRow = await leaguesApi.upsertEspnLeague(espnLeagueId.trim(), season, {
-        name: data.leagueName,
-        nfl_season_type: data.nflSeasonType,
-        scoring_field: data.scoringField,
-        scoring_label: data.scoringLabel,
-        projection_season: data.projectionSeason,
-        current_week: data.week,
-      });
-      // Credentials are only stored once we know they actually work — fetchEspnLeagueData above
-      // already proved that by succeeding with them attached.
-      if (credentials) {
-        await espnApi.setEspnCredentials(leagueRow.id, credentials.espn_s2, credentials.swid);
-      }
-      const memberRows = await membersApi.syncMembersFromEspn(leagueRow.id, data.members);
-      if (isAdditional) {
-        setBets([]);
-        setPoolEntries([]);
-        setPoolPicks([]);
-        weekCacheRef.current = {};
-        setWeekCache({});
-      }
-      setMembers(memberRows);
-      applyLeagueRow(leagueRow);
-      setMyLeagues((prev) => (
-        prev.some((l) => l.id === leagueRow.id) ? prev : [...prev, leagueRow]
-      ));
-      updateLastActiveLeague(leagueRow.id).catch(() => {});
-      setAddingLeague(false);
-      setEspnForm({ leagueId: "", season: new Date().getFullYear(), espn_s2: "", swid: "", needsCookies: false });
-    } catch (err) {
-      if (err?.code === "espn_auth_required" || err?.code === "espn_invalid_credentials") {
-        setEspnForm((f) => ({ ...f, needsCookies: true }));
-        setEspnLinkError(
-          err.code === "espn_invalid_credentials"
-            ? "Those cookies didn't work — double-check espn_s2 and SWID and try again."
-            : "This is a private league — enter your ESPN session cookies below to continue.",
-        );
-      } else {
-        setEspnLinkError("Couldn't load that ESPN league. Double-check the league ID and season.");
-      }
-    } finally {
-      setEspnLinkLoading(false);
-    }
-  }, [fetchEspnLeagueData, applyLeagueRow]);
+  }, [fetchLeagueData]);
 
   const handleClaim = useCallback(async (memberDbId) => {
     await membersApi.claimMember(memberDbId, session.user.id);
@@ -1714,31 +1632,17 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     if (demo || !league.leagueId || !league.dbId) return;
     setLeague((s) => ({ ...s, loading: true, error: null }));
     try {
-      const isEspn = league.provider === "espn";
-      const data = isEspn
-        ? await fetchEspnLeagueData(league.leagueId, league.season, null, league.dbId)
-        : await fetchLeagueData(league.leagueId);
-      const leagueRow = isEspn
-        ? await leaguesApi.upsertEspnLeague(league.leagueId, league.season, {
-          name: data.leagueName,
-          nfl_season_type: data.nflSeasonType,
-          scoring_field: data.scoringField,
-          scoring_label: data.scoringLabel,
-          projection_season: data.projectionSeason,
-          current_week: data.week,
-        })
-        : await leaguesApi.upsertLeague(league.leagueId, {
-          name: data.leagueName,
-          season: data.season,
-          nfl_season_type: data.nflSeasonType,
-          scoring_field: data.scoringField,
-          scoring_label: data.scoringLabel,
-          projection_season: data.projectionSeason,
-          current_week: data.week,
-        });
-      const memberRows = isEspn
-        ? await membersApi.syncMembersFromEspn(leagueRow.id, data.members)
-        : await membersApi.syncMembersFromSleeper(leagueRow.id, data.members);
+      const data = await fetchLeagueData(league.leagueId);
+      const leagueRow = await leaguesApi.upsertLeague(league.leagueId, {
+        name: data.leagueName,
+        season: data.season,
+        nfl_season_type: data.nflSeasonType,
+        scoring_field: data.scoringField,
+        scoring_label: data.scoringLabel,
+        projection_season: data.projectionSeason,
+        current_week: data.week,
+      });
+      const memberRows = await membersApi.syncMembersFromSleeper(leagueRow.id, data.members);
       setMembers(memberRows);
       setLeague((s) => ({
         ...s,
@@ -1752,23 +1656,18 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         scoringLabel: data.scoringLabel,
         ownerId: leagueRow.owner_id,
         subscriptionStatus: leagueRow.subscription_status || "active",
-        needsReconnect: false,
         loading: false,
         error: null,
       }));
       setSelectedWeek((w) => clampWeekToSeason(w, data.week));
-    } catch (err) {
-      if (err?.code === "espn_reconnect_required") {
-        setLeague((s) => ({ ...s, loading: false, needsReconnect: true, error: null }));
-      } else {
-        setLeague((s) => ({
-          ...s,
-          loading: false,
-          error: "Couldn't refresh league data. Try again in a moment.",
-        }));
-      }
+    } catch {
+      setLeague((s) => ({
+        ...s,
+        loading: false,
+        error: "Couldn't refresh league data. Try again in a moment.",
+      }));
     }
-  }, [fetchLeagueData, fetchEspnLeagueData, league.leagueId, league.season, league.dbId, league.provider]);
+  }, [fetchLeagueData, league.leagueId, league.dbId]);
 
   const disconnectLeague = useCallback(async () => {
     if (demo) {
@@ -1906,20 +1805,6 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     if (showSpinner) setLeague((s) => ({ ...s, loading: true, error: null }));
 
     try {
-      if (league.provider === "espn") {
-        const data = await espnApi.fetchEspnWeek(league.dbId, league.leagueId, league.season, wk);
-        const { matchups, projections, players: playerInfo } = espnApi.buildWeekDataFromEspn(data.schedule, wk);
-        const entry = { matchups, projections };
-        weekCacheRef.current = { ...weekCacheRef.current, [wk]: entry };
-        setWeekCache((prev) => ({ ...prev, [wk]: entry }));
-        // Unlike Sleeper's fetchPlayerInfo (which returns a cross-session-persisted cache that's
-        // already cumulative), buildWeekDataFromEspn only covers this week's boxscores — merge
-        // rather than overwrite so switching back to a previously-viewed week doesn't lose names.
-        setPlayers((prev) => ({ ...prev, ...playerInfo }));
-        setLeague((s) => ({ ...s, loading: showSpinner ? false : s.loading, needsReconnect: false, error: null }));
-        return true;
-      }
-
       const [currentRes, stateRes, leagueRes] = await Promise.all([
         fetch(`https://api.sleeper.app/v1/league/${league.leagueId}/matchups/${wk}`),
         fetch("https://api.sleeper.app/v1/state/nfl"),
@@ -1972,25 +1857,19 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         setSelectedWeek((sel) => clampWeekToSeason(sel, schedule.currentWeek));
       }
       return true;
-    } catch (err) {
-      if (err?.code === "espn_reconnect_required") {
-        setLeague((s) => ({ ...s, loading: false, needsReconnect: true }));
-        return false;
-      }
+    } catch {
       if (showSpinner) {
         setLeague((s) => ({
           ...s,
           loading: false,
-          error: league.provider === "espn"
-            ? "Couldn't load ESPN data for that week. Try again in a moment."
-            : "Couldn't load Sleeper data for that week. Try again in a moment.",
+          error: "Couldn't load Sleeper data for that week. Try again in a moment.",
         }));
       }
       return false;
     } finally {
       loadingWeeksRef.current.delete(wk);
     }
-  }, [league.leagueId, league.dbId, league.season, league.provider, members]);
+  }, [league.leagueId, members]);
 
   const prefetchSeasonWeeks = useCallback(async (throughWeek, { force = false } = {}) => {
     const end = Math.min(REGULAR_SEASON_WEEKS, Math.max(1, Number(throughWeek) || 1));
@@ -3516,120 +3395,6 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
     };
   }, [weekBets]);
 
-  const darkFieldStyle = { background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" };
-
-  const renderProviderToggle = () => (
-    <div style={{ display: "flex", gap: "0.35rem", margin: "0 0 0.9rem" }}>
-      {[{ id: "sleeper", label: "Sleeper" }, { id: "espn", label: "ESPN" }].map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          onClick={() => setLinkProvider(p.id)}
-          style={{
-            fontFamily: "'IBM Plex Mono', monospace", fontSize: "0.7rem", letterSpacing: "0.06em",
-            textTransform: "uppercase", padding: "0.5rem 0.9rem", borderRadius: 3, cursor: "pointer",
-            border: `1px solid ${linkProvider === p.id ? "var(--gold)" : "var(--line)"}`,
-            background: linkProvider === p.id ? "var(--gold)" : "transparent",
-            color: linkProvider === p.id ? "#241d05" : "#a9c4b6",
-            fontWeight: linkProvider === p.id ? 600 : 400,
-          }}
-        >
-          {p.label}
-        </button>
-      ))}
-    </div>
-  );
-
-  // Shared by the "Link Your League" card and "Add Another League" modal — only one of those is
-  // ever visible at once, so a single espnForm/espnLinkError pair covers both.
-  const renderEspnLinkFields = (isAdditional) => (
-    <>
-      <div className="sb-form-row">
-        <div className="sb-field" style={{ color: "var(--paper)" }}>
-          <label style={{ color: "#a9c4b6" }}>ESPN league ID</label>
-          <input
-            type="text"
-            placeholder="e.g. 123456789"
-            value={espnForm.leagueId}
-            onChange={(e) => setEspnForm((f) => ({ ...f, leagueId: e.target.value }))}
-            style={darkFieldStyle}
-          />
-        </div>
-        <div className="sb-field" style={{ maxWidth: 120, color: "var(--paper)" }}>
-          <label style={{ color: "#a9c4b6" }}>Season</label>
-          <input
-            type="number"
-            value={espnForm.season}
-            onChange={(e) => setEspnForm((f) => ({ ...f, season: Number(e.target.value) || f.season }))}
-            style={darkFieldStyle}
-          />
-        </div>
-      </div>
-      <p className="sb-note" style={{ marginTop: "-0.35rem" }}>
-        Find the league ID in your ESPN Fantasy league's URL.
-      </p>
-      {espnForm.needsCookies && (
-        <>
-          <div className="sb-field" style={{ color: "var(--paper)" }}>
-            <label style={{ color: "#a9c4b6" }}>espn_s2</label>
-            <input
-              type="text"
-              value={espnForm.espn_s2}
-              onChange={(e) => setEspnForm((f) => ({ ...f, espn_s2: e.target.value }))}
-              style={darkFieldStyle}
-            />
-          </div>
-          <div className="sb-field" style={{ color: "var(--paper)" }}>
-            <label style={{ color: "#a9c4b6" }}>SWID</label>
-            <input
-              type="text"
-              value={espnForm.swid}
-              onChange={(e) => setEspnForm((f) => ({ ...f, swid: e.target.value }))}
-              style={darkFieldStyle}
-            />
-          </div>
-          <p className="sb-note" style={{ marginTop: "-0.35rem" }}>
-            This is a private league. Sign into{" "}
-            <a href="https://fantasy.espn.com" target="_blank" rel="noreferrer" style={{ color: "var(--gold-bright)" }}>
-              fantasy.espn.com
-            </a>, open your browser's dev tools (F12) → Application/Storage → Cookies →
-            fantasy.espn.com, and copy the <span className="sb-mono">espn_s2</span> and{" "}
-            <span className="sb-mono">SWID</span> values.
-          </p>
-        </>
-      )}
-      <div className="sb-form-actions">
-        <button
-          className="sb-btn sb-btn-submit"
-          onClick={() => connectEspnLeague(
-            espnForm.leagueId,
-            espnForm.season,
-            espnForm.espn_s2 && espnForm.swid ? { espn_s2: espnForm.espn_s2, swid: espnForm.swid } : null,
-            { isAdditional },
-          )}
-          disabled={espnLinkLoading || !espnForm.leagueId.trim() || !espnForm.season}
-        >
-          <Link2 size={12} /> {espnLinkLoading ? "Connecting…" : "Connect league"}
-        </button>
-        {isAdditional && (
-          <button
-            type="button"
-            className="sb-btn sb-btn-cancel"
-            style={{ color: "#a9c4b6", borderColor: "var(--line)" }}
-            onClick={() => { setAddingLeague(false); setEspnLinkError(null); }}
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-      {espnLinkError && (
-        <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
-          <AlertTriangle size={12} /> {espnLinkError}
-        </div>
-      )}
-    </>
-  );
-
   if (bootstrapping) return <div className="sb-root" />;
 
   return (
@@ -3639,41 +3404,36 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           <div className="sb-setup-card">
             <h2>Link Your League</h2>
             <p>
-              Connect your Sleeper or ESPN league to pull in every manager automatically.
+              Connect your Sleeper league to pull in every manager automatically.
               Your league is shared with everyone who joins it — bets and balances are the same for the whole group.
             </p>
-            {renderProviderToggle()}
-            {linkProvider === "sleeper" ? (
-              <>
-                <div className="sb-field" style={{ color: "var(--paper)" }}>
-                  <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 987654321012345678"
-                    value={league.inputId}
-                    onChange={(e) => setLeague((s) => ({ ...s, inputId: e.target.value, error: null }))}
-                    style={darkFieldStyle}
-                  />
-                </div>
-                <p className="sb-note" style={{ marginTop: "-0.35rem" }}>
-                  Find it in the Sleeper app URL or league settings.
-                </p>
-                <div className="sb-form-actions">
-                  <button
-                    className="sb-btn sb-btn-submit"
-                    onClick={() => connectLeague(league.inputId)}
-                    disabled={league.loading || !league.inputId.trim()}
-                  >
-                    <Link2 size={12} /> {league.loading ? "Connecting…" : "Connect league"}
-                  </button>
-                </div>
-                {league.error && (
-                  <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
-                    <AlertTriangle size={12} /> {league.error}
-                  </div>
-                )}
-              </>
-            ) : renderEspnLinkFields(false)}
+            <div className="sb-field" style={{ color: "var(--paper)" }}>
+              <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
+              <input
+                type="text"
+                placeholder="e.g. 987654321012345678"
+                value={league.inputId}
+                onChange={(e) => setLeague((s) => ({ ...s, inputId: e.target.value, error: null }))}
+                style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
+              />
+            </div>
+            <p className="sb-note" style={{ marginTop: "-0.35rem" }}>
+              Find it in the Sleeper app URL or league settings.
+            </p>
+            <div className="sb-form-actions">
+              <button
+                className="sb-btn sb-btn-submit"
+                onClick={() => connectLeague(league.inputId)}
+                disabled={league.loading || !league.inputId.trim()}
+              >
+                <Link2 size={12} /> {league.loading ? "Connecting…" : "Connect league"}
+              </button>
+            </div>
+            {league.error && (
+              <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
+                <AlertTriangle size={12} /> {league.error}
+              </div>
+            )}
             <button type="button" className="sb-signout-link" onClick={disconnectLeague}>
               Sign out
             </button>
@@ -3754,50 +3514,45 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
           <div className="sb-setup-card">
             <h2>Add Another League</h2>
             <p>
-              Connect another Sleeper or ESPN league to this account — your existing league and
-              its bets stay exactly as they are.
+              Connect another Sleeper league to this account — your existing league and its bets
+              stay exactly as they are.
             </p>
-            {renderProviderToggle()}
-            {linkProvider === "sleeper" ? (
-              <>
-                <div className="sb-field" style={{ color: "var(--paper)" }}>
-                  <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 987654321012345678"
-                    value={addLeagueId}
-                    onChange={(e) => { setAddLeagueId(e.target.value); setAddLeagueError(null); }}
-                    style={darkFieldStyle}
-                  />
-                </div>
-                <div className="sb-form-actions">
-                  <button
-                    className="sb-btn sb-btn-submit"
-                    onClick={async () => {
-                      setAddLeagueLoading(true);
-                      await connectLeague(addLeagueId, { isAdditional: true });
-                      setAddLeagueLoading(false);
-                    }}
-                    disabled={addLeagueLoading || !addLeagueId.trim()}
-                  >
-                    <Link2 size={12} /> {addLeagueLoading ? "Connecting…" : "Connect league"}
-                  </button>
-                  <button
-                    type="button"
-                    className="sb-btn sb-btn-cancel"
-                    style={{ color: "#a9c4b6", borderColor: "var(--line)" }}
-                    onClick={() => { setAddingLeague(false); setAddLeagueId(""); setAddLeagueError(null); }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {addLeagueError && (
-                  <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
-                    <AlertTriangle size={12} /> {addLeagueError}
-                  </div>
-                )}
-              </>
-            ) : renderEspnLinkFields(true)}
+            <div className="sb-field" style={{ color: "var(--paper)" }}>
+              <label style={{ color: "#a9c4b6" }}>Sleeper league ID</label>
+              <input
+                type="text"
+                placeholder="e.g. 987654321012345678"
+                value={addLeagueId}
+                onChange={(e) => { setAddLeagueId(e.target.value); setAddLeagueError(null); }}
+                style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
+              />
+            </div>
+            <div className="sb-form-actions">
+              <button
+                className="sb-btn sb-btn-submit"
+                onClick={async () => {
+                  setAddLeagueLoading(true);
+                  await connectLeague(addLeagueId, { isAdditional: true });
+                  setAddLeagueLoading(false);
+                }}
+                disabled={addLeagueLoading || !addLeagueId.trim()}
+              >
+                <Link2 size={12} /> {addLeagueLoading ? "Connecting…" : "Connect league"}
+              </button>
+              <button
+                type="button"
+                className="sb-btn sb-btn-cancel"
+                style={{ color: "#a9c4b6", borderColor: "var(--line)" }}
+                onClick={() => { setAddingLeague(false); setAddLeagueId(""); setAddLeagueError(null); }}
+              >
+                Cancel
+              </button>
+            </div>
+            {addLeagueError && (
+              <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
+                <AlertTriangle size={12} /> {addLeagueError}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -4257,8 +4012,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                 <p className="sb-note">This is a demo league — nothing here is saved, and no real Sleeper or account data is used.</p>
               ) : (
                 <p className="sb-note">
-                  Linked to {league.provider === "espn" ? "ESPN" : "Sleeper"} league{" "}
-                  <span className="sb-mono">{league.leagueId}</span>.
+                  Linked to Sleeper league <span className="sb-mono">{league.leagueId}</span>.
                   Scores and projections for weeks 1–{currentWeek} load automatically
                   {loadedWeekCount < currentWeek ? ` (${loadedWeekCount} of ${currentWeek} ready…)` : "."}
                 </p>
@@ -4281,48 +4035,6 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
                 </button>
               </div>
               {league.error && <div className="sb-error-banner"><AlertTriangle size={12} /> {league.error}</div>}
-              {!demo && league.provider === "espn" && league.needsReconnect && (
-                <div className="sb-error-banner" style={{ marginTop: "0.75rem", flexDirection: "column", alignItems: "flex-start", gap: "0.5rem" }}>
-                  <div><AlertTriangle size={12} /> Your ESPN connection expired — reconnect to keep scores syncing.</div>
-                  <div className="sb-field" style={{ color: "var(--paper)", width: "100%" }}>
-                    <label style={{ color: "#a9c4b6" }}>espn_s2</label>
-                    <input
-                      type="text"
-                      value={espnReconnectForm.espn_s2}
-                      onChange={(e) => setEspnReconnectForm((f) => ({ ...f, espn_s2: e.target.value }))}
-                      style={darkFieldStyle}
-                    />
-                  </div>
-                  <div className="sb-field" style={{ color: "var(--paper)", width: "100%" }}>
-                    <label style={{ color: "#a9c4b6" }}>SWID</label>
-                    <input
-                      type="text"
-                      value={espnReconnectForm.swid}
-                      onChange={(e) => setEspnReconnectForm((f) => ({ ...f, swid: e.target.value }))}
-                      style={darkFieldStyle}
-                    />
-                  </div>
-                  <button
-                    className="sb-btn sb-btn-submit"
-                    disabled={espnReconnectLoading || !espnReconnectForm.espn_s2.trim() || !espnReconnectForm.swid.trim()}
-                    onClick={async () => {
-                      setEspnReconnectLoading(true);
-                      try {
-                        await espnApi.setEspnCredentials(league.dbId, espnReconnectForm.espn_s2, espnReconnectForm.swid);
-                        setEspnReconnectForm({ espn_s2: "", swid: "" });
-                        await refreshLeague();
-                        await prefetchSeasonWeeks(currentWeek, { force: true });
-                      } catch {
-                        setLeague((s) => ({ ...s, error: "Couldn't reconnect — double-check the cookie values." }));
-                      } finally {
-                        setEspnReconnectLoading(false);
-                      }
-                    }}
-                  >
-                    <Link2 size={12} /> {espnReconnectLoading ? "Reconnecting…" : "Reconnect ESPN league"}
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="sb-board">
