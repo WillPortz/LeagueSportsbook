@@ -303,6 +303,20 @@ html, body, #root { margin: 0; min-height: 100%; }
   text-align: center; margin: 0.6rem 0 0; line-height: 1.5;
 }
 
+.sb-billing-skip {
+  width: 100%; display: block; text-align: center;
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; font-weight: 600;
+  letter-spacing: 0.02em; text-transform: uppercase;
+  background: transparent; color: #a9c4b6; border: 1px solid var(--line);
+  border-radius: 9px; padding: 0.7rem 1rem; margin-top: 0.6rem; cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.sb-billing-skip:hover { border-color: #7ea08f; color: var(--paper); background: rgba(255,255,255,0.04); }
+.sb-billing-skip-note {
+  font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; color: #6b8577;
+  text-align: center; margin: 0.5rem 0 0;
+}
+
 .sb-billing-reassurance { text-align: center; margin: 1.1rem 0 0; }
 .sb-billing-reassurance-title {
   font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; font-weight: 600;

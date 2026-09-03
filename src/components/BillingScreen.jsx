@@ -76,6 +76,17 @@ export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
           </p>
         )}
 
+        {/* Bypass — payments aren't live yet, so this is the real way through for now. Not a
+            gate either way (closing/X does the same thing), just a more obvious escape hatch
+            than the small "Back to my league" link, since the CTA above is deliberately the
+            loudest thing on the page. */}
+        <button type="button" className="sb-billing-skip" onClick={onBack}>
+          Skip for now
+        </button>
+        <p className="sb-billing-skip-note">
+          Payments aren't live yet — you'll have full access either way.
+        </p>
+
         <div className="sb-billing-reassurance">
           <div className="sb-billing-reassurance-title">Simple. Secure. No hidden fees.</div>
           <p>
