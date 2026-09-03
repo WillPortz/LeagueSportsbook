@@ -153,18 +153,32 @@ Deno.serve(async (req) => {
         creds,
       );
 
+      const errorByCredsSource = {
+        none: "espn_auth_required",
+        body: "espn_invalid_credentials",
+        stored: "espn_reconnect_required",
+      } as const;
+
       if (res.status === 401 || res.status === 403) {
-        const errorByCredsSource = {
-          none: "espn_auth_required",
-          body: "espn_invalid_credentials",
-          stored: "espn_reconnect_required",
-        } as const;
         return json({ error: errorByCredsSource[credsSource] }, 401, origin);
       }
       if (!res.ok) {
         return json({ error: "espn_fetch_failed", status: res.status }, 502, origin);
       }
-      const data = await res.json();
+      // ESPN sometimes returns 200 with an empty (or non-JSON) body for a private league
+      // instead of a proper 401/403 — treat that the same as an auth rejection rather than
+      // crashing trying to parse nothing as JSON.
+      // deno-lint-ignore no-explicit-any
+      let data: any = null;
+      try {
+        const raw = await res.text();
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (!data || !Array.isArray(data.teams)) {
+        return json({ error: errorByCredsSource[credsSource] }, 401, origin);
+      }
       return json({ teams: data.teams ?? [], settings: data.settings ?? {}, status: data.status ?? {} }, 200, origin);
     }
 
@@ -213,10 +227,23 @@ Deno.serve(async (req) => {
       if (!res.ok) {
         return json({ error: "espn_fetch_failed", status: res.status }, 502, origin);
       }
-      const data = await res.json();
+      // ESPN sometimes returns 200 with an empty (or non-JSON) body for a private league
+      // instead of a proper 401/403 — treat that the same as an auth rejection rather than
+      // crashing trying to parse nothing as JSON.
+      // deno-lint-ignore no-explicit-any
+      let data: any = null;
+      try {
+        const raw = await res.text();
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (!data || !Array.isArray(data.schedule)) {
+        return json({ error: stored ? "espn_reconnect_required" : "espn_auth_required" }, 401, origin);
+      }
       // mMatchupScore returns the whole season's schedule, not just the requested week — trim
       // it down here rather than shipping every week over the wire on every poll.
-      const schedule = (data.schedule ?? []).filter((m: { matchupPeriodId?: number }) => m.matchupPeriodId === week);
+      const schedule = data.schedule.filter((m: { matchupPeriodId?: number }) => m.matchupPeriodId === week);
       return json({ schedule, week, season }, 200, origin);
     }
 
