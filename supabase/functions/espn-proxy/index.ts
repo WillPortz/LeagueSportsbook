@@ -56,7 +56,20 @@ async function fetchEspn(
       url.searchParams.set(key, val);
     }
   }
-  const headers: Record<string, string> = { "User-Agent": ESPN_UA, Accept: "application/json" };
+  // A server-to-server request with a bare User-Agent is missing everything else a real browser
+  // always sends — ESPN's edge (likely a WAF/CDN layer, not the application itself) appears to
+  // soft-block those even with valid cookies attached (200/202 with an empty body instead of
+  // real data or a clean 401/403). Rounding these out to look like an actual browser request.
+  const headers: Record<string, string> = {
+    "User-Agent": ESPN_UA,
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    Referer: "https://fantasy.espn.com/",
+    Origin: "https://fantasy.espn.com",
+    "x-fantasy-source": "kona",
+    "x-fantasy-platform": "kona-PROD-1dc40132dc2070ef47881dc95b633e62cebc9913",
+    "x-fantasy-filter": '{"filterActive":null}',
+  };
   if (creds) {
     // A stray newline or trailing space from copy-pasting the cookie value breaks the request
     // silently (no error, ESPN just doesn't recognize it) — trim defensively.
