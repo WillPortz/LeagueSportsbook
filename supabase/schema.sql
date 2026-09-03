@@ -6,7 +6,14 @@ create extension if not exists pgcrypto;
 -- ============ leagues ============
 create table if not exists leagues (
   id uuid primary key default gen_random_uuid(),
-  sleeper_league_id text not null unique,
+  provider text not null default 'sleeper' check (provider in ('sleeper', 'espn')),
+  sleeper_league_id text unique,
+  espn_league_id text,   -- ESPN reuses the same league id across seasons, so it's not unique alone
+  -- exactly one of sleeper_league_id / espn_league_id must be set, matching the active provider
+  constraint leagues_provider_id_check check (
+    (provider = 'sleeper' and sleeper_league_id is not null)
+    or (provider = 'espn' and espn_league_id is not null)
+  ),
   name text not null default 'Your League',
   season int not null default extract(year from now())::int,
   nfl_season_type text not null default 'regular',
@@ -33,7 +40,15 @@ create table if not exists leagues (
   created_at timestamptz not null default now()
 );
 
--- ============ members (one row per Sleeper roster/owner in a league) ============
+create unique index if not exists leagues_espn_league_id_season_unique
+  on leagues (espn_league_id, season) where espn_league_id is not null;
+
+-- ============ members (one row per Sleeper/ESPN roster+owner in a league) ============
+-- Column names stay Sleeper-flavored (sleeper_owner_id, roster_id) even for ESPN leagues —
+-- ESPN's team id fills both, since an ESPN team IS its own roster (no separate owner/roster
+-- split like Sleeper has). Kept this way rather than renaming to provider-neutral column names
+-- to avoid touching every existing Sleeper query/RLS policy for a second provider that reuses
+-- the exact same shape anyway.
 create table if not exists members (
   id uuid primary key default gen_random_uuid(),
   league_id uuid not null references leagues(id) on delete cascade,
@@ -149,6 +164,50 @@ create table if not exists survivor_picks (
 );
 
 create index if not exists survivor_picks_league_week_idx on survivor_picks (league_id, week);
+
+-- ============ espn credentials (private-league cookies, encrypted) ============
+-- espn_s2/SWID for private ESPN leagues. One manager supplying these grants read access for
+-- the whole league. Encrypted with pgp_sym_encrypt using a key that lives only as an Edge
+-- Function secret (ESPN_CRED_ENC_KEY) — never stored in this database, never sent to the
+-- client. RLS below is deliberately policy-free: no anon/authenticated role can read or write
+-- this table at all, in either direction — the client can't produce a validly-encrypted row
+-- anyway since it never has the key. Only the espn-proxy Edge Function (via the service-role
+-- key, which bypasses RLS) touches it, and only through the two functions below.
+create table if not exists espn_credentials (
+  id uuid primary key default gen_random_uuid(),
+  league_id uuid not null references leagues(id) on delete cascade,
+  espn_s2_enc bytea not null,
+  swid_enc bytea not null,
+  updated_by uuid references auth.users(id),   -- who last supplied/refreshed these cookies
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (league_id)
+);
+
+-- security definer so these can encrypt/decrypt despite the table having zero client-facing RLS
+-- policies; execute is revoked from everyone but service_role so only the Edge Function (never
+-- an anon/authenticated client, even with a valid JWT) can call them.
+create or replace function espn_cred_upsert(p_league_id uuid, p_s2 text, p_swid text, p_key text, p_uid uuid)
+returns void language sql security definer as $$
+  insert into espn_credentials (league_id, espn_s2_enc, swid_enc, updated_by, updated_at)
+  values (p_league_id, pgp_sym_encrypt(p_s2, p_key), pgp_sym_encrypt(p_swid, p_key), p_uid, now())
+  on conflict (league_id) do update set
+    espn_s2_enc = excluded.espn_s2_enc,
+    swid_enc = excluded.swid_enc,
+    updated_by = excluded.updated_by,
+    updated_at = now();
+$$;
+
+create or replace function espn_cred_get(p_league_id uuid, p_key text)
+returns table(espn_s2 text, swid text) language sql security definer as $$
+  select pgp_sym_decrypt(espn_s2_enc, p_key), pgp_sym_decrypt(swid_enc, p_key)
+  from espn_credentials where league_id = p_league_id;
+$$;
+
+revoke all on function espn_cred_upsert(uuid, text, text, text, uuid) from public;
+revoke all on function espn_cred_get(uuid, text) from public;
+grant execute on function espn_cred_upsert(uuid, text, text, text, uuid) to service_role;
+grant execute on function espn_cred_get(uuid, text) to service_role;
 
 -- ============ atomic per-league ticket numbering (replaces client ticketSeq state) ============
 create or replace function assign_bet_ticket() returns trigger as $$
@@ -274,6 +333,8 @@ alter table pool_entries     enable row level security;
 alter table pool_picks       enable row level security;
 alter table survivor_entries enable row level security;
 alter table survivor_picks   enable row level security;
+alter table espn_credentials enable row level security;
+-- no policies created for espn_credentials — see the comment above its table definition.
 
 drop policy if exists leagues_select on leagues;
 drop policy if exists leagues_insert on leagues;
