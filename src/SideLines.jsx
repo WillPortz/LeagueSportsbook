@@ -1349,6 +1349,10 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
   const [leaguePickerOpen, setLeaguePickerOpen] = useState(false);
   const [addingLeague, setAddingLeague] = useState(false);
   const [showBilling, setShowBilling] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingLeague, setDeletingLeague] = useState(false);
+  const [deleteLeagueError, setDeleteLeagueError] = useState(null);
   const [addLeagueId, setAddLeagueId] = useState("");
   const [addLeagueError, setAddLeagueError] = useState(null);
   const [addLeagueLoading, setAddLeagueLoading] = useState(false);
@@ -1610,6 +1614,9 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
       setAddingLeague(false);
       setAddLeagueId("");
       setAddLeagueError(null);
+      // Surface the pricing page right after linking rather than waiting for someone to find
+      // it under League — this is the natural moment to show it, not a gate on anything above.
+      setShowBilling(true);
     } catch {
       if (isAdditional) {
         setAddLeagueError("Couldn't load that league. Double-check the Sleeper league ID.");
@@ -1679,6 +1686,50 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
     if (!window.confirm("Sign out of this device? Nobody else's data is affected.")) return;
     await signOut();
   }, [demo, onExitDemo]);
+
+  // Permanently deletes the current league — cascades to every member/bet/pool/survivor row in
+  // it via the DB's foreign keys, for every manager, not just this account. RLS restricts the
+  // actual delete to the league's owner; deleteConfirmText typed against the exact league name
+  // is the app-side guard against a stray click.
+  const handleDeleteLeague = useCallback(async () => {
+    if (demo || deleteConfirmText.trim() !== league.leagueName) return;
+    setDeletingLeague(true);
+    setDeleteLeagueError(null);
+    try {
+      await leaguesApi.deleteLeague(league.dbId);
+      const remaining = myLeagues.filter((l) => l.id !== league.dbId);
+      setMyLeagues(remaining);
+      if (remaining.length > 0) {
+        await switchLeague(remaining[0].id);
+      } else {
+        setBets([]);
+        setPoolEntries([]);
+        setPoolPicks([]);
+        setSurvivorEntries([]);
+        setSurvivorPicks([]);
+        weekCacheRef.current = {};
+        setWeekCache({});
+        setMembers([]);
+        setLeague((s) => ({
+          ...s,
+          linked: false,
+          dbId: null,
+          leagueId: "",
+          leagueName: "",
+          inputId: "",
+          ownerId: null,
+          error: null,
+          loading: false,
+        }));
+      }
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText("");
+    } catch (err) {
+      setDeleteLeagueError(err.message || "Couldn't delete that league — try again.");
+    } finally {
+      setDeletingLeague(false);
+    }
+  }, [demo, deleteConfirmText, league.leagueName, league.dbId, myLeagues, switchLeague]);
 
   useEffect(() => {
     if (league.dbId) refreshLeague();
@@ -4121,6 +4172,62 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
                 </div>
               ))}
             </div>
+
+            {!demo && isLeagueOwner && (
+              <div className="sb-board sb-danger-zone">
+                <h3>Danger Zone</h3>
+                <p className="sb-note">
+                  Permanently deletes {league.leagueName} — every bet, pool pick, and ledger
+                  entry for everyone in it. This can't be undone.
+                </p>
+                {!showDeleteConfirm ? (
+                  <button
+                    type="button"
+                    className="sb-btn sb-btn-decline"
+                    onClick={() => { setShowDeleteConfirm(true); setDeleteLeagueError(null); }}
+                  >
+                    Delete League
+                  </button>
+                ) : (
+                  <>
+                    <div className="sb-field" style={{ color: "var(--paper)" }}>
+                      <label style={{ color: "#a9c4b6" }}>
+                        Type <span className="sb-mono">{league.leagueName}</span> to confirm
+                      </label>
+                      <input
+                        type="text"
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        style={{ background: "#0e211b", color: "var(--paper)", borderColor: "var(--line)" }}
+                      />
+                    </div>
+                    <div className="sb-form-actions">
+                      <button
+                        type="button"
+                        className="sb-btn sb-btn-decline"
+                        onClick={handleDeleteLeague}
+                        disabled={deletingLeague || deleteConfirmText.trim() !== league.leagueName}
+                      >
+                        {deletingLeague ? "Deleting…" : "Yes, permanently delete"}
+                      </button>
+                      <button
+                        type="button"
+                        className="sb-btn sb-btn-cancel"
+                        style={{ color: "#a9c4b6", borderColor: "var(--line)" }}
+                        onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmText(""); setDeleteLeagueError(null); }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </>
+                )}
+                {deleteLeagueError && (
+                  <div className="sb-error-banner" style={{ marginTop: "0.75rem" }}>
+                    <AlertTriangle size={12} /> {deleteLeagueError}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

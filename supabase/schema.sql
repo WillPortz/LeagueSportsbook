@@ -278,9 +278,14 @@ alter table survivor_picks   enable row level security;
 drop policy if exists leagues_select on leagues;
 drop policy if exists leagues_insert on leagues;
 drop policy if exists leagues_update on leagues;
+drop policy if exists leagues_delete on leagues;
 create policy leagues_select on leagues for select using (auth.uid() is not null);
 create policy leagues_insert on leagues for insert with check (auth.uid() is not null);
 create policy leagues_update on leagues for update using (auth.uid() is not null);
+-- deleting a league cascades to every member/bet/pool/survivor row in it (see the on delete
+-- cascade foreign keys above) — restricted to the owner, unlike select/update which stay open
+-- to any signed-in member, since this destroys shared data for everyone in the league.
+create policy leagues_delete on leagues for delete using (owner_id = auth.uid());
 
 drop policy if exists members_select on members;
 drop policy if exists members_insert on members;
