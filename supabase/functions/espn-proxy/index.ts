@@ -101,6 +101,24 @@ Deno.serve(async (req) => {
       const echoData = await echoRes.json();
       return json({ echoStatus: echoRes.status, echoHeaders: echoData.headers }, 200, origin);
     }
+    // Hits ESPN directly with no cookies at all, from Supabase's actual edge network — tells us
+    // whether the 202-empty-body treatment is specific to authenticated/cookie requests or
+    // applies to every request from this network regardless of auth.
+    if (peekBody?.mode === "debug_espn_raw") {
+      const testLeagueId = peekBody.espnLeagueId || "1";
+      const testSeason = peekBody.season || 2024;
+      const espnRes = await fetchEspn(
+        `seasons/${testSeason}/segments/0/leagues/${testLeagueId}`,
+        { view: ["mTeam"] },
+      );
+      const rawText = await espnRes.text();
+      return json({
+        status: espnRes.status,
+        bodyLength: rawText.length,
+        bodyPreview: rawText.slice(0, 300),
+        responseHeaders: Object.fromEntries(espnRes.headers.entries()),
+      }, 200, origin);
+    }
   } catch {
     // not JSON / no mode field — fall through to normal handling below
   }
