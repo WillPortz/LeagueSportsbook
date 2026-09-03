@@ -4131,8 +4131,6 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
         <BillingScreen
           leagueId={league.dbId}
           leagueName={league.leagueName}
-          ownerName={leagueOwnerName}
-          isOwner={isLeagueOwner}
           demo={demo}
           onBack={() => setShowBilling(false)}
         />

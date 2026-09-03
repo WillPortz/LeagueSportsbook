@@ -1,70 +1,37 @@
-// PLACEHOLDER billing module — no real payment processor is wired in anywhere. Every function
-// here is a mock: subscribeLeague "succeeds" instantly and just remembers the result in
-// localStorage, scoped to this browser. Nothing here talks to Stripe, Apple/Google IAP, or any
-// backend, and nothing in the rest of the app reads getLeagueBillingStatus to gate access.
+// PLACEHOLDER billing module — no real payment processor is wired in anywhere, and this
+// deliberately does not simulate one completing. startCheckout() is the seam: once a real
+// processor exists, this is the one function to rewrite — BillingScreen.jsx just calls it and
+// reacts to whether checkout is connected, nothing UI-side should need to change.
 //
-// This file is the seam to replace when real billing gets built. The important thing is that
-// SUBSCRIBING and CHECKING STATUS are already their own functions with a processor-agnostic
-// signature (leagueId + plan in, a status out) — BillingScreen.jsx never touches localStorage or
-// any processor SDK directly, it only calls these two functions. That split matters because the
-// real implementation will very likely differ by platform: a web checkout can call out to a
-// server that creates a Stripe Checkout session, but a native iOS/Android build generally can't
-// use Stripe directly for a digital subscription — Apple/Google require their own in-app
-// purchase systems instead. Swapping either or both of those in later means rewriting the guts
-// of this one file; nothing about BillingScreen.jsx or its call sites should need to change.
-
-const STORAGE_PREFIX = "sidelines_mock_billing_";
+// Why the signature looks the way it does: a web checkout would create a Stripe Checkout Session
+// server-side and redirect the browser to its returned URL. A native iOS/Android build generally
+// can't use Stripe directly for a digital subscription — Apple/Google require their own in-app
+// purchase systems instead. Keeping "start checkout for this league" as one processor-agnostic
+// call (leagueId + plan in, a result out) means that split happens inside this file later,
+// not across the UI.
 
 // Single placeholder plan for now — one purchase per league, covers every member in it. Price/
-// cadence are illustrative only, easy to tweak here without touching any UI code.
+// copy are illustrative only, easy to tweak here without touching any UI code.
 export const PLAN = {
-  id: "league-season-pass",
-  name: "League Season Pass",
-  price: 49,
+  id: "league-pass",
+  name: "League Pass",
+  price: 24.99,
   currency: "USD",
   interval: "season",
   features: [
-    "Covers every manager in your league — nobody else pays individually",
-    "Full access to Board, Matchup, and Bet Slips wagering",
-    "Weekly Pool and Survivor Pool included",
-    "Shared Ledger and season-long standings",
+    "Create your fantasy league",
+    "Invite your entire league for free",
+    "Track side bets automatically",
+    "Keep a running “who owes who” ledger",
+    "Keep your league history",
   ],
 };
 
-function storageKey(leagueId) {
-  return `${STORAGE_PREFIX}${leagueId}`;
-}
-
-// Mock "checkout" — resolves after a short delay to feel like a real request, then marks the
-// league subscribed in localStorage. Always succeeds; there is no failure path to mock since no
-// real payment info is ever collected.
-export async function subscribeLeague(leagueId, plan = PLAN) {
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  try {
-    localStorage.setItem(storageKey(leagueId), JSON.stringify({
-      planId: plan.id,
-      subscribedAt: new Date().toISOString(),
-    }));
-  } catch {
-    // localStorage unavailable (private browsing, quota, etc.) — the success state still shows
-    // for this session, it just won't persist across a reload. Harmless for a mock.
-  }
-  return { ok: true };
-}
-
-export function getLeagueBillingStatus(leagueId) {
-  try {
-    const raw = localStorage.getItem(storageKey(leagueId));
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function clearLeagueBillingStatus(leagueId) {
-  try {
-    localStorage.removeItem(storageKey(leagueId));
-  } catch {
-    // no-op
-  }
+// No processor is connected yet, so this always resolves { connected: false } rather than
+// faking a completed purchase — BillingScreen shows an honest "checkout isn't live yet" state.
+// Once Stripe (or a native IAP flow) is wired up, this becomes an async call that either
+// redirects the browser to a real Checkout Session URL or kicks off the platform purchase flow,
+// resolving { connected: true } (or throwing) instead.
+export async function startCheckout(leagueId, plan = PLAN) {
+  return { connected: false, leagueId, planId: plan.id };
 }
