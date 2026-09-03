@@ -34,7 +34,7 @@ export default function AuthScreen({ onDemo }) {
     <div className="sb-root">
       <div className="sb-setup">
         <div className="sb-setup-card">
-          <h2>League Sportsbook</h2>
+          <h2>SideLines</h2>
           <p>
             {mode === "signup"
               ? "Create your account to join your league's book."

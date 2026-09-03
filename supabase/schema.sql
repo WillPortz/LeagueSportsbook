@@ -1,4 +1,4 @@
--- League Sportsbook — Supabase schema
+-- SideLines — Supabase schema
 -- Run this whole file once in the Supabase SQL Editor (Dashboard -> SQL Editor -> New query).
 
 create extension if not exists pgcrypto;

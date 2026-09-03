@@ -1,6 +1,6 @@
 // Drop-in replacements for leaguesApi.js / membersApi.js / betsApi.js used only in Demo Mode.
 // Same function signatures as the real modules, backed by in-memory state instead of Supabase,
-// so LeagueSportsbook.jsx's call sites don't need to know which one they're talking to.
+// so SideLines.jsx's call sites don't need to know which one they're talking to.
 
 import {
   DEMO_USER_ID, DEMO_LEAGUE_DB_ID, DEMO_SLEEPER_LEAGUE_ID, DEMO_CURRENT_WEEK, DEMO_SEASON,

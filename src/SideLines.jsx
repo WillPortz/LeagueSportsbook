@@ -1302,7 +1302,7 @@ function groupForTab(tabId) {
   return TAB_GROUPS.find((g) => (g.tabs ? g.tabs.some((t) => t.id === tabId) : g.id === tabId));
 }
 
-export default function LeagueSportsbook({ session, demo = false, onExitDemo }) {
+export default function SideLines({ session, demo = false, onExitDemo }) {
   const leaguesApi = demo ? demoLeaguesApi : realLeaguesApi;
   const membersApi = demo ? demoMembersApi : realMembersApi;
   const betsApi = demo ? demoBetsApi : realBetsApi;
@@ -3459,7 +3459,7 @@ export default function LeagueSportsbook({ session, demo = false, onExitDemo }) 
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <div className="sb-marquee-title sb-display">
-              League Sportsbook
+              SideLines
               {demo && <span className="sb-demo-badge">Demo Mode</span>}
             </div>
             <div className="sb-marquee-sub">
