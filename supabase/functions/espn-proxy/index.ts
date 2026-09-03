@@ -58,7 +58,9 @@ async function fetchEspn(
   }
   const headers: Record<string, string> = { "User-Agent": ESPN_UA, Accept: "application/json" };
   if (creds) {
-    headers["Cookie"] = `espn_s2=${creds.espn_s2}; SWID=${normalizeSwid(creds.swid)}`;
+    // A stray newline or trailing space from copy-pasting the cookie value breaks the request
+    // silently (no error, ESPN just doesn't recognize it) — trim defensively.
+    headers["Cookie"] = `espn_s2=${creds.espn_s2.trim()}; SWID=${normalizeSwid(creds.swid)}`;
   }
   return fetch(url.toString(), { headers });
 }
@@ -160,6 +162,7 @@ Deno.serve(async (req) => {
       } as const;
 
       if (res.status === 401 || res.status === 403) {
+        console.log(`espn link: ESPN returned ${res.status} (credsSource=${credsSource})`);
         return json({ error: errorByCredsSource[credsSource] }, 401, origin);
       }
       if (!res.ok) {
@@ -172,11 +175,14 @@ Deno.serve(async (req) => {
       let data: any = null;
       try {
         const raw = await res.text();
+        console.log(`espn link: status=${res.status} bodyLength=${raw.length} credsSource=${credsSource}`);
         data = raw ? JSON.parse(raw) : null;
-      } catch {
+      } catch (parseErr) {
+        console.log(`espn link: body parse failed — ${parseErr}`);
         data = null;
       }
       if (!data || !Array.isArray(data.teams)) {
+        console.log(`espn link: no usable teams array (credsSource=${credsSource}) — treating as ${errorByCredsSource[credsSource]}`);
         return json({ error: errorByCredsSource[credsSource] }, 401, origin);
       }
       return json({ teams: data.teams ?? [], settings: data.settings ?? {}, status: data.status ?? {} }, 200, origin);
