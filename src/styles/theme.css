@@ -192,6 +192,26 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-setup-member.claimable:hover { border-color: var(--gold); background: rgba(201, 162, 39, 0.08); }
 .sb-league-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase; color: #9ad6b3; background: rgba(154,214,179,0.1); border: 1px solid rgba(154,214,179,0.25); padding: 0.2rem 0.5rem; border-radius: 3px; }
 
+/* Billing/pricing overlay — a dismissible page over the app, never a gate. Reuses .sb-setup/
+   .sb-setup-card's look (see above) but as a fixed overlay with a wider card, same pattern as
+   the "Add Another League" modal. */
+.sb-billing-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.55); margin: 0; max-width: none; padding: 2.5rem 1.25rem; overflow-y: auto; }
+.sb-billing-card { max-width: 480px; margin: 0 auto; position: relative; }
+.sb-billing-close { position: absolute; top: 1.1rem; right: 1.1rem; background: transparent; border: none; color: #7ea08f; cursor: pointer; padding: 0.3rem; line-height: 0; }
+.sb-billing-close:hover { color: var(--paper); }
+
+.sb-plan-card { background: var(--felt); border: 1px solid var(--gold); border-radius: 6px; padding: 1.2rem; margin: 0 0 1.1rem; }
+.sb-plan-price { display: flex; align-items: baseline; gap: 0.35rem; margin-bottom: 0.9rem; }
+.sb-plan-amount { font-family: 'Bebas Neue', sans-serif; font-size: 2.4rem; color: var(--gold-bright); line-height: 1; }
+.sb-plan-interval { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #7ea08f; }
+.sb-plan-features { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.sb-plan-features li { display: flex; align-items: flex-start; gap: 0.5rem; font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--paper); line-height: 1.4; }
+.sb-plan-features li svg { color: var(--gold-bright); flex: none; margin-top: 0.15rem; }
+
+.sb-billing-success { display: flex; align-items: flex-start; gap: 0.6rem; background: rgba(154,214,179,0.1); border: 1px solid rgba(154,214,179,0.3); border-radius: 6px; padding: 0.9rem; color: #9ad6b3; margin-bottom: 0.5rem; }
+.sb-billing-success svg { flex: none; margin-top: 0.15rem; }
+.sb-billing-success-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.03em; margin-bottom: 0.2rem; }
+
 .sb-ticket-odds { font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; color: #8a7c55; margin-top: 0.25rem; }
 
 .sb-board-line { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 6px; padding: 0.9rem 1rem; margin-bottom: 0.75rem; }

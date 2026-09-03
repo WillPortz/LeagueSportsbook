@@ -12,6 +12,7 @@ import { demoLeaguesApi, demoMembersApi, demoBetsApi, demoPoolApi, demoSurvivorA
 import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoData.js";
 import { signOut, updateLastActiveLeague } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
+import BillingScreen from "./components/BillingScreen.jsx";
 
 const BUILD_STAMP = "DEV";
 const REGULAR_SEASON_WEEKS = 18;
@@ -1347,6 +1348,7 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
   const [myLeagues, setMyLeagues] = useState([]);
   const [leaguePickerOpen, setLeaguePickerOpen] = useState(false);
   const [addingLeague, setAddingLeague] = useState(false);
+  const [showBilling, setShowBilling] = useState(false);
   const [addLeagueId, setAddLeagueId] = useState("");
   const [addLeagueError, setAddLeagueError] = useState(null);
   const [addLeagueLoading, setAddLeagueLoading] = useState(false);
@@ -3395,6 +3397,11 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
     };
   }, [weekBets]);
 
+  // league.ownerId is an auth.users id, not a Sleeper owner id, so it's looked up against
+  // members' userId (the claimer's auth uid) rather than nameOf (which keys off Sleeper ids).
+  const isLeagueOwner = !!league.ownerId && session.user.id === league.ownerId;
+  const leagueOwnerName = members.find((m) => m.userId === league.ownerId)?.name || null;
+
   if (bootstrapping) return <div className="sb-root" />;
 
   return (
@@ -4038,6 +4045,20 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
             </div>
 
             <div className="sb-board">
+              <h3>Plan &amp; Billing</h3>
+              <p className="sb-note">
+                {isLeagueOwner
+                  ? "You're the league owner — one payment from you would cover everyone here."
+                  : `${leagueOwnerName ? leagueOwnerName : "Your league owner"} would handle billing for the whole league — you'd never pay individually.`}
+              </p>
+              <div className="sb-form-actions">
+                <button type="button" className="sb-btn sb-btn-submit" onClick={() => setShowBilling(true)}>
+                  View plan
+                </button>
+              </div>
+            </div>
+
+            <div className="sb-board">
               <h3>Weekly League Pool</h3>
               <p className="sb-note">Default entry fee everyone antes up each week. Editing this only changes future weeks.</p>
               <div className="sb-pool-question" style={{ borderBottom: "none", padding: 0 }}>
@@ -4106,6 +4127,16 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
         </>
       )}
       {renderBetSlipBar()}
+      {showBilling && (
+        <BillingScreen
+          leagueId={league.dbId}
+          leagueName={league.leagueName}
+          ownerName={leagueOwnerName}
+          isOwner={isLeagueOwner}
+          demo={demo}
+          onBack={() => setShowBilling(false)}
+        />
+      )}
     </div>
   );
 }
