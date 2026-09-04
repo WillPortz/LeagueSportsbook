@@ -85,8 +85,12 @@ function buildMembers(rosters, users) {
 
 function americanOdds(prob) {
   const p = Math.min(0.92, Math.max(0.08, prob));
-  if (p >= 0.5) return Math.round(-100 * p / (1 - p));
-  return Math.round(100 * (1 - p) / p);
+  const fair = p >= 0.5 ? -100 * p / (1 - p) : 100 * (1 - p) / p;
+  // Compress the extremes only: odds beyond even money (100) are pulled in by 50%, so a
+  // near-toss-up stays close to even while a lopsided market (e.g. a 12-team title longshot
+  // near the probability floor) stops paying out an unrealistic +1100-ish number nobody wants
+  // to cover the other side of.
+  return Math.round(Math.sign(fair) * (100 + (Math.abs(fair) - 100) * 0.5));
 }
 
 function formatOdds(odds) {
