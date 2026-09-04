@@ -80,20 +80,17 @@ export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
 
         {/* Bypass — payments aren't live yet, so this is the real way through for now. Not a
             gate either way (closing/X does the same thing), just a more obvious escape hatch
-            than the small "Back to my league" link. Typing the app name first adds a small
-            deliberate step so it isn't a stray single click, since the CTA above is
-            deliberately the loudest thing on the page. */}
+            than the small "Back to my league" link. The confirmation phrase is deliberately not
+            shown anywhere — an aria-label (not a visible <label>) covers accessibility instead —
+            so this is a genuine deliberate step, not a hint-and-click. */}
         <div className="sb-billing-skip-confirm">
-          <label htmlFor="sb-billing-skip-input" className="sb-billing-skip-label">
-            Type "SideLines" to skip for now
-          </label>
           <input
             id="sb-billing-skip-input"
             type="text"
             className="sb-billing-skip-input"
             value={skipConfirmText}
             onChange={(e) => setSkipConfirmText(e.target.value)}
-            placeholder="SideLines"
+            aria-label="Confirmation phrase to skip for now"
             autoComplete="off"
           />
           <button

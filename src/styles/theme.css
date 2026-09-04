@@ -308,11 +308,6 @@ html, body, #root { margin: 0; min-height: 100%; }
 }
 
 .sb-billing-skip-confirm { margin-top: 0.6rem; }
-.sb-billing-skip-label {
-  display: block; font-family: 'IBM Plex Mono', monospace; font-size: 0.65rem;
-  letter-spacing: 0.06em; text-transform: uppercase; color: #6b8577;
-  text-align: center; margin-bottom: 0.4rem;
-}
 .sb-billing-skip-input {
   display: block; width: 100%; box-sizing: border-box; padding: 0.55rem 0.7rem;
   border: 1px solid var(--line); border-radius: 6px;
