@@ -13,6 +13,7 @@ import { DEMO_WEEK_CACHE, DEMO_PLAYERS, DEMO_PLAYOFF_TEAMS } from "./lib/demoDat
 import { signOut, updateLastActiveLeague } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
 import BillingScreen from "./components/BillingScreen.jsx";
+import BrandMark from "./components/BrandMark.jsx";
 
 const BUILD_STAMP = "DEV";
 const REGULAR_SEASON_WEEKS = 18;
@@ -3517,6 +3518,7 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <div className="sb-marquee-title sb-display">
+              <BrandMark size={26} />
               SideLines
               {demo && <span className="sb-demo-badge">Demo Mode</span>}
             </div>

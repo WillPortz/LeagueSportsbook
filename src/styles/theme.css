@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
 
 html, body, #root { margin: 0; min-height: 100%; }
 *, *::before, *::after { box-sizing: border-box; }
@@ -181,6 +181,8 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-setup { max-width: 520px; margin: 3rem auto; padding: 0 1.25rem; }
 .sb-setup-card { background: var(--felt-dark); border: 1px solid var(--line); border-radius: 8px; padding: 1.5rem 1.4rem; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
 .sb-setup-card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.04em; }
+.sb-brand-heading { display: flex; align-items: center; gap: 0.55rem; }
+.sb-brand-heading svg { flex: none; }
 .sb-setup-card p { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #7ea08f; line-height: 1.6; margin: 0 0 1.1rem; }
 
 .sb-demo-cta { margin-top: 1.3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); text-align: center; }

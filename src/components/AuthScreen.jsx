@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { signIn, signUp } from "../lib/auth.js";
+import BrandMark from "./BrandMark.jsx";
 
 export default function AuthScreen({ onDemo }) {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
@@ -34,7 +35,10 @@ export default function AuthScreen({ onDemo }) {
     <div className="sb-root">
       <div className="sb-setup">
         <div className="sb-setup-card">
-          <h2>SideLines</h2>
+          <h2 className="sb-brand-heading">
+            <BrandMark size={34} />
+            SideLines
+          </h2>
           <p>
             {mode === "signup"
               ? "Create your account to join your league's book."
