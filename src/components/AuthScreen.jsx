@@ -2,6 +2,7 @@ import { useState } from "react";
 import { AlertTriangle, Check } from "lucide-react";
 import { signIn, signUp } from "../lib/auth.js";
 import BrandMark from "./BrandMark.jsx";
+import Wordmark from "./Wordmark.jsx";
 
 export default function AuthScreen({ onDemo }) {
   const [mode, setMode] = useState("signin"); // "signin" | "signup"
@@ -37,7 +38,7 @@ export default function AuthScreen({ onDemo }) {
         <div className="sb-setup-card">
           <h2 className="sb-brand-heading">
             <BrandMark size={34} />
-            SideLines
+            <Wordmark />
           </h2>
           <p>
             {mode === "signup"

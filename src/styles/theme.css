@@ -183,6 +183,8 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-setup-card h2 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; color: var(--gold-bright); margin: 0 0 0.35rem; letter-spacing: 0.04em; }
 .sb-brand-heading { display: flex; align-items: center; gap: 0.55rem; }
 .sb-brand-heading svg { flex: none; }
+.sb-wordmark { text-transform: uppercase; }
+.sb-wordmark-big { font-size: 1.22em; }
 .sb-setup-card p { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: #7ea08f; line-height: 1.6; margin: 0 0 1.1rem; }
 
 .sb-demo-cta { margin-top: 1.3rem; padding-top: 1.2rem; border-top: 1px solid var(--line); text-align: center; }

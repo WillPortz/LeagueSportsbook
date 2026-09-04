@@ -14,6 +14,7 @@ import { signOut, updateLastActiveLeague } from "./lib/auth.js";
 import ClaimManagerScreen from "./components/ClaimManagerScreen.jsx";
 import BillingScreen from "./components/BillingScreen.jsx";
 import BrandMark from "./components/BrandMark.jsx";
+import Wordmark from "./components/Wordmark.jsx";
 
 const BUILD_STAMP = "DEV";
 const REGULAR_SEASON_WEEKS = 18;
@@ -3519,7 +3520,7 @@ export default function SideLines({ session, demo = false, onExitDemo }) {
           <div>
             <div className="sb-marquee-title sb-display">
               <BrandMark size={26} />
-              SideLines
+              <Wordmark />
               {demo && <span className="sb-demo-badge">Demo Mode</span>}
             </div>
             <div className="sb-marquee-sub">
