@@ -34,7 +34,8 @@ html, body, #root { margin: 0; min-height: 100%; }
 .sb-demo-badge { font-family: 'IBM Plex Mono', monospace; font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: #241d05; background: var(--gold); border-radius: 3px; padding: 0.22rem 0.5rem; line-height: 1; }
 
 .sb-signout-link { display: block; margin-top: 0.9rem; background: none; border: none; color: #a9c4b6; font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: underline; cursor: pointer; padding: 0; }
-.sb-signout-link:hover { color: var(--paper); }
+.sb-signout-link:hover:not(:disabled) { color: var(--paper); }
+.sb-signout-link:disabled { opacity: 0.35; cursor: default; text-decoration: none; }
 
 .sb-viewer-select { background: var(--felt-dark); border: 1px solid var(--line); color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 3px; }
 
@@ -240,7 +241,8 @@ html, body, #root { margin: 0; min-height: 100%; }
   padding: 0.35rem; line-height: 0; border-radius: 50%;
   transition: color 0.15s ease, background 0.15s ease;
 }
-.sb-billing-close:hover { color: var(--paper); background: rgba(255,255,255,0.06); }
+.sb-billing-close:hover:not(:disabled) { color: var(--paper); background: rgba(255,255,255,0.06); }
+.sb-billing-close:disabled { opacity: 0.35; cursor: default; }
 
 .sb-billing-kicker {
   font-family: 'IBM Plex Mono', monospace; font-size: 0.68rem; font-weight: 600;

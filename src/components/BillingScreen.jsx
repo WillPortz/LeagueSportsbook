@@ -4,7 +4,9 @@ import { PLAN, startCheckout } from "../lib/billing.js";
 
 // Pricing/checkout page — for-show only right now. No real payment processor is wired in; see
 // src/lib/billing.js for the startCheckout() seam this screen calls. Nothing here gates access
-// to anything else in the app — closing this overlay always returns to a fully-usable league.
+// to anything else in the app — every exit (X, "Skip for now", "Back to my league") leads to a
+// fully-usable league. They all require the confirmation phrase first, though, so leaving isn't
+// a stray single click.
 //
 // Framed as buying access to SideLines for the league (an organizing tool), not as placing a
 // wager — the pricing copy stays deliberately clear of "bet"/"odds"-style language even though
@@ -28,7 +30,13 @@ export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
   return (
     <div className="sb-billing-overlay">
       <div className="sb-billing-card">
-        <button type="button" className="sb-billing-close" onClick={onBack} aria-label="Close">
+        <button
+          type="button"
+          className="sb-billing-close"
+          onClick={onBack}
+          disabled={!skipConfirmed}
+          aria-label="Close"
+        >
           <X size={18} />
         </button>
 
@@ -78,9 +86,9 @@ export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
           </p>
         )}
 
-        {/* Bypass — payments aren't live yet, so this is the real way through for now. Not a
-            gate either way (closing/X does the same thing), just a more obvious escape hatch
-            than the small "Back to my league" link. The confirmation phrase is deliberately not
+        {/* Bypass — payments aren't live yet, so this is the real way through for now. Every exit
+            on this screen (X up top, this button, "Back to my league" below) stays disabled until
+            this matches, so there's no frictionless way past it. The phrase is deliberately not
             shown anywhere — an aria-label (not a visible <label>) covers accessibility instead —
             so this is a genuine deliberate step, not a hint-and-click. */}
         <div className="sb-billing-skip-confirm">
@@ -135,7 +143,12 @@ export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
           <p className="sb-billing-demo-note">Preview page — this is a demo league, nothing here is real.</p>
         )}
 
-        <button type="button" className="sb-signout-link" onClick={onBack}>
+        <button
+          type="button"
+          className="sb-signout-link"
+          onClick={onBack}
+          disabled={!skipConfirmed}
+        >
           Back to my league
         </button>
       </div>
