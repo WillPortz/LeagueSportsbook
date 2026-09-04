@@ -12,6 +12,8 @@ import { PLAN, startCheckout } from "../lib/billing.js";
 export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutResult, setCheckoutResult] = useState(null);
+  const [skipConfirmText, setSkipConfirmText] = useState("");
+  const skipConfirmed = skipConfirmText.trim().toLowerCase() === "sidelines";
 
   async function handleCheckout() {
     setCheckingOut(true);
@@ -78,11 +80,31 @@ export default function BillingScreen({ leagueName, demo, leagueId, onBack }) {
 
         {/* Bypass — payments aren't live yet, so this is the real way through for now. Not a
             gate either way (closing/X does the same thing), just a more obvious escape hatch
-            than the small "Back to my league" link, since the CTA above is deliberately the
-            loudest thing on the page. */}
-        <button type="button" className="sb-billing-skip" onClick={onBack}>
-          Skip for now
-        </button>
+            than the small "Back to my league" link. Typing the app name first adds a small
+            deliberate step so it isn't a stray single click, since the CTA above is
+            deliberately the loudest thing on the page. */}
+        <div className="sb-billing-skip-confirm">
+          <label htmlFor="sb-billing-skip-input" className="sb-billing-skip-label">
+            Type "SideLines" to skip for now
+          </label>
+          <input
+            id="sb-billing-skip-input"
+            type="text"
+            className="sb-billing-skip-input"
+            value={skipConfirmText}
+            onChange={(e) => setSkipConfirmText(e.target.value)}
+            placeholder="SideLines"
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            className="sb-billing-skip"
+            onClick={onBack}
+            disabled={!skipConfirmed}
+          >
+            Skip for now
+          </button>
+        </div>
         <p className="sb-billing-skip-note">
           Payments aren't live yet — you'll have full access either way.
         </p>
